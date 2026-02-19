@@ -5,8 +5,6 @@ services:
     ports:
       - 3000:3000
     environment:
-      - OTEL_ENABLED=true
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       # Default to slim image for faster startup
       - DEFAULT_SNAPSHOT=daytonaio/sandbox:0.5.0-slim
       - ENCRYPTION_KEY=supersecretkey
@@ -41,7 +39,6 @@ services:
       - INTERNAL_REGISTRY_ADMIN=admin
       - INTERNAL_REGISTRY_PASSWORD=password
       - INTERNAL_REGISTRY_PROJECT_ID=daytona
-      - SMTP_HOST=maildev
       - SMTP_PORT=1025
       - SMTP_USER=
       - SMTP_PASSWORD=
@@ -91,7 +88,6 @@ services:
       - RUNNER_START_SCORE_THRESHOLD=3
       - SKIP_USER_EMAIL_VERIFICATION=true
       - RUN_MIGRATIONS=true
-      - OTEL_COLLECTOR_API_KEY=otel_collector_api_key
       - HEALTH_CHECK_API_KEY=supersecretkey
     networks:
       - daytona-network
@@ -140,7 +136,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - AWS_DEFAULT_BUCKET=daytona
       - DAYTONA_API_URL=http://api:3000/api
-      - RUNNER_DOMAIN=localhost
+      - RUNNER_DOMAIN=runner
       - SSH_GATEWAY_ENABLE=true
       - SSH_PUBLIC_KEY=c3NoLXJzYSBBQUFBQjNOemFDMXljMkVBQUFBREFRQUJBQUFCZ1FEZUtocFdOYVhVNkpSMnJXekc1NlZJeksrcmsrdForcCtVUmwyeWF5cWRnZGg2bnVOL1NtVnJsYmV4MGlrRVZZemdRWUIwWno5M2dqOVhxSkd4WjJiMHVoSDFzNkp2bnhKZVdIK05rbjBNMzRiRjZkeVloZ3o4M0JaTitWcElJdnVDT1pxYWE4VnlRWjhPdjVLMU00enlmQnFCMld3ejcwZEVWUnFaMnVZckd5U0RqUUIrU3hRQ3phY0djb2JRQTFUd2QxdEJvSk5BaVpPWXFSU3d6TmNoTk5hZHlxSHRGdkZRQ0hhNjZWaVBmQ0FVUGt2cEN6ZGh3TmJGdVhGVWkxbnZOWkx4M056RU41M05LWUhZcWU3Y3dXZkI4QjBoRDhDd3hmSDd6T0o1b1RCMnBMVVlsUWpZRDNsN3k4SkFTbDZpYkpuR1A1SWczVXpZWlRIdUdkNzVXWktnNTRJTVROQlFPMWpJdE9HL0orUm1XbzB0YTdpRkF6ZExyL1BmbDdXTVMwbEZhSm9scTdUVmJLUG1JODFTOU04VEgrbXhLbGZ5b2NqZzhwSUdlQUllcEo3dXl1Vk1xT2wxeVVuSFNycDRlVEVlR0k3NlpCOFRoUzhkYnBLUTIvb2RYMHkwc3FSZDI0Y2lGdnM0dnZVaW80NFdYNlNWRG54dXpWRHc1Rzg9IGRheXRvbmFAMDQwNjZiZDIwY2Vi
     networks:
@@ -250,13 +246,6 @@ services:
     ports:
       - 6000:6000
 
-  maildev:
-    image: maildev/maildev
-    networks:
-      - daytona-network
-    ports:
-      - 1080:1080
-
   minio:
     image: minio/minio:latest
     environment:
@@ -270,20 +259,6 @@ services:
       - daytona-network
     ports:
       - 9001:9001
-
-  jaeger:
-    image: jaegertracing/all-in-one:1.67.0
-    networks:
-      - daytona-network
-    ports:
-      - 16686:16686
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.138.0
-    volumes:
-      - ./otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
-    networks:
-      - daytona-network
 
 volumes:
   registry: {}

@@ -1,0 +1,27 @@
+Search for text or regex patterns INSIDE file contents in the sandbox.
+This is like `grep -rn` — it finds which files contain the pattern and shows matching lines.
+
+**When to use:**
+* Find where a function/class/variable is defined or used
+* Search for error messages, TODOs, or specific strings
+* Find all imports of a module
+
+**Parameters:**
+* pattern: Regex or text to search for (e.g. "def calculate", "import os", "TODO")
+* path: Directory to search in (default: /home/daytona/workspace, searches recursively)
+* include: Optional file filter glob (e.g. "*.py", "*.js")
+
+**Examples:**
+```
+# Find all files containing "calculate_total"
+pattern="calculate_total", path="/home/daytona/workspace"
+
+# Find Python files with "import pandas"
+pattern="import pandas", path="/home/daytona/workspace", include="*.py"
+
+# Find class definitions
+pattern="class .*Controller", include="*.py"
+```
+
+**Output format:** filepath:line_number:matching_line
+Only the first 100 results are returned.

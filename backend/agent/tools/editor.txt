@@ -1,0 +1,23 @@
+A str_replace-based file editor for the sandbox. Supports 4 commands:
+
+**view** — View a file or specific lines
+  path: file path
+  view_range: [start_line, end_line] (optional, 1-indexed)
+
+**str_replace** — Replace exact text (must be unique in the file)
+  path: file path
+  old_str: exact text to find (include enough context to be unique)
+  new_str: replacement text
+
+**insert** — Insert text after a line number
+  path: file path
+  insert_line: line number (0 = beginning of file)
+  new_str: text to insert
+
+**undo** — Revert the last edit
+  path: file path
+
+**Tips:**
+* Use `view` first to see the current state before editing
+* For `str_replace`, include 2-3 lines of surrounding context in old_str to ensure uniqueness
+* Prefer `str_replace` over write for editing existing files — it's faster and safer

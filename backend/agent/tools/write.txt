@@ -1,0 +1,2 @@
+Write (create or overwrite) a file inside the sandbox.
+Provide the absolute path and the text content. Parent directories are created automatically.

@@ -1,0 +1,28 @@
+Show the recursive directory tree structure inside the sandbox.
+This gives an overview of the entire project layout — useful for understanding codebase structure.
+
+**When to use:**
+* First time exploring a project — see the full structure
+* Check what files exist before making changes
+* Understand how code is organized (folders, modules, packages)
+
+**Parameters:**
+* path: Root directory to start from (default: /home/daytona/workspace)
+* depth: How deep to go (default: 3 levels, use -1 for unlimited)
+* include_hidden: Show hidden files like .env, .gitignore (default: false)
+* pattern: Only show files matching glob (e.g. "*.py")
+
+**Examples:**
+```
+# See project structure (3 levels deep)
+path="/home/daytona/workspace"
+
+# See only Python files
+path="/home/daytona/workspace", pattern="*.py"
+
+# Full tree including hidden files
+path="/home/daytona/workspace", depth=-1, include_hidden=true
+```
+
+**Note:** Hidden folders (.git, .venv, __pycache__, node_modules) are excluded by default.
+Results capped at 500 entries for large projects.

@@ -1,0 +1,2 @@
+Get metadata (size, permissions, timestamps, etc.) for a file or folder inside the sandbox.
+Provide the absolute path.

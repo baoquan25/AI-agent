@@ -1,0 +1,633 @@
+@import '@vscode/codicons/dist/codicon.css';
+/* Override codicon font path so Next.js serves it from public */
+@font-face {
+  font-family: 'codicon';
+  font-display: block;
+  src: url('/codicon.ttf') format('truetype');
+}
+
+/* --- Reset & Vars --- */
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #000000;
+  --surface: #0d0d0d;
+  --border: #2a2a2a;
+  --text: #ccc;
+  --muted: #888;
+  --accent: #569cd6;
+  --success: #4caf50;
+  --error: #f44336;
+  --warning: #ff9800;
+  --scrollbar-bg: transparent;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+  --python-icon: #5da5e8;
+  --modified-tab: #e5c07b;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Codicon sizes: tree icons giống Cursor (nhỏ gọn) --- */
+.icon-btn .codicon { font-size: 16px; }
+.tree-lead-icon.codicon { font-size: 14px; }
+.tree-item-icon.codicon { font-size: 14px; }
+/* Python icon: dùng chung màu xanh sáng, một kiểu cho tree / tab / search */
+.codicon-python {
+  color: var(--python-icon) !important;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-lead-icon.codicon-python,
+.tree-item-icon.codicon-python {
+  font-size: 12px;
+  transform: translateY(1px);
+}
+.editor-tab .tab-close .codicon { font-size: 14px; }
+
+/* --- Header --- */
+header {
+  height: 44px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+
+.brand { font-size: 13px; font-weight: 500; color: var(--text); }
+
+/* --- Sidebar toolbar (tabs: Files, Search) --- */
+.sidebar-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 6px;
+}
+.sidebar-tab {
+  padding: 4px 5px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.sidebar-tab.active { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.sidebar-tab .codicon { font-size: 14px; }
+
+/* --- Sidebar search panel (tab Search) --- */
+.sidebar-search-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar-search-header {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 6px 6px 4px;
+}
+.sidebar-search-row {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+.sidebar-search-input {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 11px;
+  height: 24px;
+  line-height: 1;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  outline: none;
+  transition: none;
+}
+.sidebar-search-input:focus { border-color: var(--border); }
+.sidebar-search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 2px 4px;
+  font-size: 12px;
+}
+.sidebar-search-empty {
+  color: var(--muted);
+  padding: 8px 6px;
+  font-size: 12px;
+}
+.sidebar-search-item {
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+}
+.sidebar-search-item .codicon { color: var(--accent); }
+.sidebar-search-item:hover { background: rgba(255, 255, 255, 0.06); }
+
+.container {
+  flex: 1;
+  display: flex;
+  width: 100%;
+  height: calc(100vh - 44px);
+  flex-direction: row;
+}
+
+#fileTreeSection {
+  width: 100%;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#chatSection {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: transparent;
+  border-left: 1px solid var(--border);
+}
+
+#editorSection {
+  min-height: 80px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#outputSection {
+  min-height: 80px;
+  width: 100%;
+  background: #000000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --- Output & Terminal panels: scrollable với scrollbar đẹp --- */
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.panel-scroll.hidden {
+  display: none;
+}
+.panel-scroll::-webkit-scrollbar {
+  width: 100px;
+  height: 100px;
+}
+.panel-scroll::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg);
+  border-radius: 0;
+}
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+.panel-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+.panel-scroll::-webkit-scrollbar-corner {
+  background: var(--bg);
+}
+
+.terminal-panel {
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.xterm-container {
+  background: var(--bg);
+}
+
+/* xterm.js container auto-fill */
+.terminal-panel .xterm {
+  height: 100%;
+}
+.terminal-panel .xterm-viewport {
+  overflow-y: auto !important;
+}
+.terminal-panel .xterm-screen {
+  width: 100% !important;
+  margin: 12px;
+}
+
+/* --- File Tree (giống Cursor) --- */
+#fileTree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1px 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+#fileTree::-webkit-scrollbar { width: 8px; }
+#fileTree::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+#fileTree::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+#fileTree::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.tree-item:hover { background: rgba(255,255,255,0.05); }
+.tree-item.selected { background: rgba(255,255,255,0.08); }
+
+.tree-lead-icon {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin-right: 2px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+  opacity: 0.8;
+}
+.tree-item-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  flex-shrink: 0;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-item-content { display: flex; align-items: center; flex: 1; gap: 0; min-width: 0; }
+.tree-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tree-item-size { font-size: 10px; color: var(--muted); margin-left: auto; }
+.tree-children { padding-left: 0; }
+
+.tree-inline-create-row .tree-lead-icon { pointer-events: none; }
+.tree-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* File tree: chỉ hiện Save, New File, New Folder, Refresh khi hover/trỏ vào tree */
+.file-tree-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.file-tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  padding: 6px 6px 4px;
+  background: transparent;
+  gap: 2px;
+}
+.file-tree-section .file-tree-actions {
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width 0.2s ease, opacity 0.2s ease;
+}
+.file-tree-section:hover .file-tree-actions {
+  max-width: 160px;
+  opacity: 1;
+}
+/* FILES và Search cùng style, lấy Search làm chuẩn */
+.file-tree-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.file-tree-actions {
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+.file-tree-actions .icon-btn {
+  padding: 3px;
+  color: var(--muted);
+  border-radius: 2px;
+}
+.file-tree-actions .icon-btn .codicon { font-size: 16px; }
+.file-tree-actions .icon-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tree-inline-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-family: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  outline: none;
+}
+
+/* --- Context menu --- */
+.context-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 0;
+  z-index: 1000;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  min-width: 160px;
+}
+.context-menu-item {
+  padding: 6px 12px; cursor: pointer; font-size: 12px; display: flex;
+  align-items: center; gap: 8px; color: var(--text);
+}
+.context-menu-item:hover { background: rgba(255,255,255,0.05); }
+.context-menu-item.danger { color: var(--error); }
+
+/* --- Modal --- */
+.modal {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); z-index: 2000;
+  align-items: center; justify-content: center;
+}
+.modal.show { display: flex; }
+.modal-content {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 20px; min-width: 400px; max-width: 500px;
+}
+.modal-title { font-size: 14px; font-weight: 500; margin-bottom: 12px; }
+.modal-input {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); padding: 8px;
+  border-radius: 3px; color: var(--text); font-size: 13px; margin-bottom: 12px;
+}
+.modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-btn {
+  padding: 6px 12px; border: none; border-radius: 3px; font-size: 12px;
+  cursor: pointer;
+}
+.modal-btn-primary { background: var(--accent); color: #fff; }
+.modal-btn-secondary { background: var(--border); color: var(--text); }
+
+/* --- Toolbar / Section --- */
+.section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--border); min-height: 32px; background: var(--surface); }
+.tab-title { font-size: 12px; color: var(--muted); }
+
+/* --- Resizer --- */
+.resizer-v {
+  width: 1px; cursor: col-resize; background: transparent; transition: background 0.15s;
+  flex-shrink: 0; position: relative;
+}
+.resizer-v:hover, .resizer-v.resizing { background: var(--accent); }
+.resizer-h {
+  height: 1px; cursor: row-resize; background: rgba(255, 255, 255, 0.12); transition: background 0.15s;
+  flex-shrink: 0;
+}
+.resizer-h:hover, .resizer-h.resizing { background: var(--accent); }
+
+/* --- Editor Tabs --- */
+.editor-tabs-bar { display: flex; align-items: center; border-bottom: 1px solid var(--border); min-height: 32px; }
+.editor-tabs { display: flex; flex: 1; overflow-x: auto; overflow-y: hidden; }
+.editor-tabs::-webkit-scrollbar { height: 0; }
+.editor-tab {
+  display: flex; align-items: center; padding: 0 12px; height: 32px;
+  cursor: pointer; border-right: 1px solid var(--border); gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  min-width: fit-content;
+}
+.editor-tab:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.editor-tab.active { color: var(--accent); background: var(--bg); border-bottom: 2px solid var(--accent); }
+.editor-tab.modified { color: var(--modified-tab); }
+.editor-tab.modified.active { color: var(--modified-tab); }
+.tab-name { white-space: nowrap; display: flex; align-items: center; }
+.editor-tab .tab-close {
+  opacity: 0; cursor: pointer; display: flex; align-items: center;
+  border-radius: 3px; transition: opacity 0.15s, background 0.15s;
+}
+.editor-tab:hover .tab-close,
+.editor-tab.active .tab-close { opacity: 0.6; }
+.editor-tab .tab-close:hover {
+  opacity: 1; background: rgba(255,255,255,0.1);
+}
+
+/* --- Output Tabs (giống Cursor: text thuần, tab active gạch trắng dưới) --- */
+.output-tabs-bar {
+  display: flex;
+  align-items: stretch;
+  height: 35px;
+  background: var(--bg);
+  flex-shrink: 0;
+  padding: 0 0 0 8px;
+  gap: 0;
+}
+.output-tab {
+  position: relative;
+  padding: 0 10px;
+  height: 35px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.1s ease;
+}
+.output-tab::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 1px;
+  background: transparent;
+  transition: background 0.1s ease;
+}
+.output-tab:hover {
+  color: var(--text);
+}
+.output-tab.active {
+  color: var(--text);
+}
+.output-tab.active::after {
+  background: var(--text);
+}
+
+.actions { display: flex; gap: 6px; align-items: center; margin-left: auto; padding-right: 8px; }
+.icon-btn {
+  background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px;
+  border-radius: 3px; display: flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+.btn-run {
+  display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--muted);
+  border-radius: 3px; padding: 4px; font-size: 11px;
+  cursor: pointer; height: 24px;
+}
+.btn-run:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.btn-run .codicon { font-size: 16px; }
+.btn-run:disabled { opacity: 0.6; cursor: not-allowed; }
+.txt-btn {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 3px; padding: 0 10px; font-size: 11px; cursor: pointer;
+  height: 24px; display: flex; align-items: center;
+}
+.txt-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+/* --- Code Area --- */
+#codeArea {
+  flex: 1; padding: 16px; font-family: 'Fira Code', monospace; font-size: 13px;
+  line-height: 1.6; background: var(--bg); color: var(--text); border: none;
+  resize: none; outline: none; overflow: auto; tab-size: 4;
+}
+#codeArea::-webkit-scrollbar { width: 8px; height: 8px; }
+#codeArea::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+#codeArea::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+#codeArea::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* --- Output (scroll do .panel-scroll, một thanh scrollbar chung) --- */
+#output {
+  padding: 16px;
+  word-wrap: break-word;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+.output-error { color: var(--error); display: flex; align-items: center; gap: 6px; }
+.output-error .output-stdout { color: var(--error); }
+#output .output-error { display: block; }
+#output .output-error .output-stdout { margin: 0; }
+.output-success { color: var(--success); display: flex; align-items: center; gap: 6px; }
+#output .output-divider,
+.output-divider {
+  border: none;
+  border-top: 2px dashed #aaa;
+  margin: 10px 0;
+  opacity: 1;
+}
+
+/* --- Chat --- */
+#chatMessages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#chatMessages::-webkit-scrollbar { width: 8px; }
+#chatMessages::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+#chatMessages::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+#chatMessages::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+.chat-bubble {
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 14px;
+  border-radius: 8px;
+  max-width: 90%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.chat-bubble.user { background: var(--accent); color: #fff; align-self: flex-end; border-radius: 8px 8px 0 8px; }
+.chat-bubble.ai { background: var(--surface); color: var(--text); align-self: flex-start; border-radius: 8px 8px 8px 0; border: 1px solid var(--border); }
+.chat-bubble.ai.thinking { color: var(--muted); font-style: italic; }
+
+.chat-input-area {
+  flex-shrink: 0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#chatInput {
+  width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px; min-height: 48px; max-height: 120px;
+  resize: none; font-size: 13px; line-height: 1.4; outline: none;
+  font-family: inherit;
+}
+#chatInput:focus { border-color: var(--accent); }
+.chat-footer { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.chat-loading { font-size: 11px; color: var(--muted); font-style: italic; }
+
+/* --- Rich Output --- */
+.rich-output-item { margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.rich-output-item img { max-width: 100%; display: block; background: #fff; }
+.rich-output-label { padding: 8px 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border); }
+.rich-output-html { background: #fff; }
+.rich-output-html { min-height: 120px; background: var(--surface); padding: 10px; overflow: auto; }
+.spinner { width: 10px; height: 10px; border: 2px solid rgba(0,0,0,0.3); border-top: 2px solid #000; border-radius: 50%; animation: spin 1s linear infinite; display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Status bar --- */
+.status-bar {
+  display: flex; align-items: center; padding: 0 12px; font-size: 11px;
+  height: 24px; background: var(--surface); border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.output-stdout { margin: 0; padding: 0; white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.4; }
