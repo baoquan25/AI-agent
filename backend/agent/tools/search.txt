@@ -1,3 +1,0 @@
-Search for files by pattern inside the sandbox.
-Provide a directory path and a glob pattern (e.g. '*.py', '**/*.txt').
-Returns a list of matching file paths.

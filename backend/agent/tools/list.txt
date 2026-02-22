@@ -1,2 +1,0 @@
-List directory contents inside the sandbox.
-Provide an absolute directory path. Returns a list of files and folders.

@@ -1,2 +1,0 @@
-Read the content of a file inside the sandbox.
-Provide the absolute path to the file. Returns the full text content.

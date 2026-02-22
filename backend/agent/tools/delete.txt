@@ -1,2 +1,0 @@
-Delete a file or folder inside the sandbox.
-Provide the absolute path. Set recursive=True to delete non-empty directories.

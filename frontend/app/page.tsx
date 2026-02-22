@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import type { TreeNode, TabItem, FileCacheItem, ChatMessage } from '../lib/types';
 import {
   API_BASE,
   AI_AGENT_URL,
   apiHeaders,
   escapeHtml,
-  escapeHtmlAttr,
   stripAnsi,
   formatFileSize,
   getTerminalWsUrl,
@@ -15,6 +15,7 @@ import {
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+
 export default function Home() {
   const [codeValue, setCodeValue] = useState('');
   const [outputHtml, setOutputHtml] = useState('');
@@ -39,13 +40,13 @@ export default function Home() {
   const [treeCreateInput, setTreeCreateInput] = useState('');
   const [renameNode, setRenameNode] = useState<{ node: TreeNode; path: string } | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  // Flag to prevent double-submit on rename (Enter then blur)
+  const renameSubmittedRef = useRef(false);
+  // Flag to prevent double-submit on create (Enter then blur)
+  const createSubmittedRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{
-    show: boolean;
-    x: number;
-    y: number;
-    node: TreeNode | null;
-    showNewFile: boolean;
-    showNewFolder: boolean;
+    show: boolean; x: number; y: number; node: TreeNode | null;
+    showNewFile: boolean; showNewFolder: boolean;
   }>({ show: false, x: 0, y: 0, node: null, showNewFile: false, showNewFolder: false });
   const [sidebarTab, setSidebarTab] = useState<'files' | 'search'>('files');
   const [searchPattern, setSearchPattern] = useState('');
@@ -67,6 +68,8 @@ export default function Home() {
   const editorFlexRef = useRef(editorFlex);
   editorFlexRef.current = editorFlex;
 
+  // ── File Tree ──────────────────────────────────────────────────────
+
   async function loadFileTree() {
     try {
       const res = await fetch(`${API_BASE}/fs/tree`, { headers: apiHeaders() });
@@ -76,24 +79,36 @@ export default function Home() {
       setFileTreeData(null);
     }
   }
+
   useEffect(() => { loadFileTree(); }, []);
+
+  // ── Tabs ───────────────────────────────────────────────────────────
 
   function addTab(path: string, name: string) {
     setOpenTabs((prev) => (prev.some((t) => t.path === path) ? prev : [...prev, { path, name }]));
     setCurrentFilePath(path);
   }
+
   function switchTab(path: string) { setCurrentFilePath(path); }
+
+  // FIX #2: use functional update to avoid stale openTabs
   function closeTab(path: string) {
     const cached = fileCache[path];
     if (cached?.modified && !confirm(`"${path.split('/').pop()}" has unsaved changes. Close anyway?`)) return;
-    setOpenTabs((prev) => prev.filter((t) => t.path !== path));
-    if (currentFilePath === path) {
-      const next = openTabs.filter((t) => t.path !== path);
-      setCurrentFilePath(next.length ? next[next.length - 1].path : null);
-    }
+    setOpenTabs((prev) => {
+      const next = prev.filter((t) => t.path !== path);
+      setCurrentFilePath((cur) => {
+        if (cur !== path) return cur;
+        return next.length ? next[next.length - 1].path : null;
+      });
+      return next;
+    });
   }
 
-  async function loadFileContent(path: string) {
+  // ── File Content ──────────────────────────────────────────────────
+
+  // FIX #1: wrap in useCallback so useEffect can declare it as stable dep
+  const loadFileContent = useCallback(async (path: string) => {
     const cached = fileCache[path];
     if (cached) {
       setCodeValue(cached.content);
@@ -113,9 +128,10 @@ export default function Home() {
         setOutputHtml(`<span class="output-error">Failed: ${path}</span>`);
       }
     } catch (e) {
-      setOutputHtml(`<span class="output-error"><span class="codicon codicon-error"></span> ${(e as Error).message}</span>`);
+      setOutputHtml(`<span class="output-error">${(e as Error).message}</span>`);
     }
-  }
+  }, [fileCache]);
+
   useEffect(() => {
     if (currentFilePath) {
       loadFileContent(currentFilePath);
@@ -123,7 +139,7 @@ export default function Home() {
       setCodeValue('');
       setHasUnsavedChanges(false);
     }
-  }, [currentFilePath]);
+  }, [currentFilePath, loadFileContent]);
 
   function handleCodeChange(value: string) {
     setCodeValue(value);
@@ -132,6 +148,8 @@ export default function Home() {
       setHasUnsavedChanges(true);
     }
   }
+
+  // ── CRUD ──────────────────────────────────────────────────────────
 
   async function createFileOnServer(path: string) {
     try {
@@ -146,6 +164,7 @@ export default function Home() {
       setOutputHtml(`<span class="output-error">${(e as Error).message}</span>`);
     }
   }
+
   async function createFolderOnServer(path: string) {
     try {
       const res = await fetch(`${API_BASE}/fs/folder`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ path }) });
@@ -158,6 +177,7 @@ export default function Home() {
       setOutputHtml(`<span class="output-error">${(e as Error).message}</span>`);
     }
   }
+
   async function deleteNodeOnServer(path: string) {
     try {
       const res = await fetch(`${API_BASE}/fs/path?path=${encodeURIComponent(path)}&recursive=true`, { method: 'DELETE', headers: apiHeaders() });
@@ -172,6 +192,7 @@ export default function Home() {
       setOutputHtml(`<span class="output-error">${(e as Error).message}</span>`);
     }
   }
+
   async function renameOnServer(oldPath: string, newPath: string) {
     try {
       const res = await fetch(`${API_BASE}/fs/rename`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify({ source: oldPath, destination: newPath }) });
@@ -193,6 +214,8 @@ export default function Home() {
     }
   }
 
+  // ── Save ──────────────────────────────────────────────────────────
+
   async function saveAllFiles() {
     const modifiedPaths = Object.entries(fileCache).filter(([, v]) => v.modified).map(([k]) => k);
     if (modifiedPaths.length === 0) {
@@ -212,20 +235,23 @@ export default function Home() {
         } else failed.push(path);
       } catch { failed.push(path); }
     }
-    if (failed.length === 0) setOutputHtml(`<span class="output-success">Saved ${savedCount} file(s)</span>`);
-    else setOutputHtml(`<span class="output-error">Saved ${savedCount}/${modifiedPaths.length}. Failed: ${failed.join(', ')}</span>`);
-    setHasUnsavedChanges(false);
+    if (failed.length === 0) {
+      setOutputHtml(`<span class="output-success">Saved ${savedCount} file(s)</span>`);
+      // FIX #5: only clear unsaved flag when ALL files saved successfully
+      setHasUnsavedChanges(false);
+    } else {
+      setOutputHtml(`<span class="output-error">Saved ${savedCount}/${modifiedPaths.length}. Failed: ${failed.join(', ')}</span>`);
+      // Still has unsaved: leave hasUnsavedChanges = true
+    }
   }
+
+  // ── Run ───────────────────────────────────────────────────────────
 
   async function runCode() {
     setRunBusy(true);
     setOutputHtml(`<span style="color:var(--muted)">Running...</span>`);
     try {
-      const payload = {
-        code: codeValue,
-        use_jupyter: true,
-        file_path: currentFilePath || undefined,
-      };
+      const payload = { code: codeValue, use_jupyter: true, file_path: currentFilePath || undefined };
       const res = await fetch(`${API_BASE}/run`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) {
@@ -247,7 +273,7 @@ export default function Home() {
           const d = item.data || '';
           const lib = item.library ?? item.lib ?? '';
           if (type.startsWith('image/')) html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph"></span> ${lib || 'Chart'} ${i + 1}</div><img src="data:${type};base64,${d}" alt="Output" /></div>`;
-          else if (type === 'text/html') html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph-line"></span> ${lib || 'HTML'} ${i + 1}</div><div class="rich-output-html">${d}</div></div>`;
+          else if (type === 'text/html') html += `<div class="rich-output-item"><div class="rich-output-label"> </div><div class="rich-output-html">${d}</div></div>`;
           else if (type === 'image/svg+xml') html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-paintcan"></span> SVG ${i + 1}</div><div style="background:white;padding:10px;">${d}</div></div>`;
         });
       }
@@ -259,6 +285,8 @@ export default function Home() {
     setRunBusy(false);
   }
 
+  // ── Tree helpers ──────────────────────────────────────────────────
+
   function toggleFolder(path: string) {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
@@ -267,11 +295,13 @@ export default function Home() {
       return next;
     });
   }
+
   function getParentPathForNew(): string {
     if (selectedFolder) return selectedFolder;
     if (currentFilePath) { const parts = currentFilePath.split('/'); parts.pop(); return parts.join('/'); }
     return '';
   }
+
   function toolbarNewFile() {
     const parent = getParentPathForNew();
     setTreeCreateParentPath(parent);
@@ -282,6 +312,7 @@ export default function Home() {
     if (parent) setExpandedFolders((prev) => new Set(prev).add(parent));
     setTimeout(() => treeCreateInputRef.current?.focus(), 50);
   }
+
   function toolbarNewFolder() {
     const parent = getParentPathForNew();
     setTreeCreateParentPath(parent);
@@ -292,6 +323,7 @@ export default function Home() {
     if (parent) setExpandedFolders((prev) => new Set(prev).add(parent));
     setTimeout(() => treeCreateInputRef.current?.focus(), 50);
   }
+
   function confirmCreate() {
     if (chatLoading) return;
     const name = treeCreateInput.trim();
@@ -304,27 +336,61 @@ export default function Home() {
     setTreeCreateBeforePath(null);
     setTreeCreateInput('');
   }
+
   function cancelCreate() {
     setTreeCreateMode(null);
     setTreeCreateParentPath('');
     setTreeCreateBeforePath(null);
     setTreeCreateInput('');
+    createSubmittedRef.current = false;
   }
+
+  // FIX #6: use submitted flag to prevent Enter → blur double-submit
+  function handleRenameKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !chatLoading) {
+      e.preventDefault();
+      if (!renameNode || renameSubmittedRef.current) return;
+      renameSubmittedRef.current = true;
+      const oldPath = renameNode.path;
+      const name = renameValue.trim();
+      if (name && name !== renameNode.node?.name) {
+        const newPath = (oldPath.split('/').slice(0, -1).join('/') + '/' + name).replace(/\/+/g, '/');
+        renameOnServer(oldPath, newPath);
+      } else {
+        setRenameNode(null);
+      }
+    }
+    if (e.key === 'Escape') setRenameNode(null);
+  }
+
   function handleRenameBlur() {
     if (!renameNode) return;
+    if (renameSubmittedRef.current) { renameSubmittedRef.current = false; return; }
     if (chatLoading) { setRenameNode(null); return; }
     const oldPath = renameNode.path;
-    const oldName = renameNode.node?.name ?? '';
     const name = renameValue.trim();
     setRenameNode(null);
-    if (!name || name === oldName) return;
+    if (!name || name === renameNode.node?.name) return;
     const newPath = (oldPath.split('/').slice(0, -1).join('/') + '/' + name).replace(/\/+/g, '/');
     if (newPath !== oldPath) renameOnServer(oldPath, newPath);
   }
+
+  function handleCreateKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (createSubmittedRef.current) return;
+      createSubmittedRef.current = true;
+      confirmCreate();
+    }
+    if (e.key === 'Escape') cancelCreate();
+  }
+
   function handleCreateBlur() {
+    if (createSubmittedRef.current) { createSubmittedRef.current = false; return; }
     if (treeCreateInput.trim()) confirmCreate();
     else cancelCreate();
   }
+
   function handleContextMenuAction(action: 'newFile' | 'newFolder' | 'rename' | 'delete') {
     const node = contextMenu.node;
     const path = node?.path || node?.name || '';
@@ -346,6 +412,7 @@ export default function Home() {
       if (parentPath) setExpandedFolders((prev) => new Set(prev).add(parentPath));
       setTimeout(() => treeCreateInputRef.current?.focus(), 50);
     } else if (action === 'rename' && path) {
+      renameSubmittedRef.current = false;
       setRenameNode({ node: node!, path });
       setRenameValue(node?.name || '');
       setTimeout(() => renameInputRef.current?.focus(), 50);
@@ -353,7 +420,11 @@ export default function Home() {
       if (confirm(`Delete ${path}?`)) deleteNodeOnServer(path);
     }
   }
+
+  // ── Search ────────────────────────────────────────────────────────
+
   function openSearchTab() { setSidebarTab('search'); setSearchResults([]); setTimeout(() => searchInputRef.current?.focus(), 50); }
+
   async function searchFiles(patternOverride?: string) {
     const pattern = (patternOverride ?? searchPattern).trim();
     if (!pattern) { setSearchResults([]); return; }
@@ -365,6 +436,28 @@ export default function Home() {
       setSearchResults([`Error: ${(e as Error).message}`]);
     }
   }
+
+  // ── Chat ──────────────────────────────────────────────────────────
+
+  function buildOutputItemHtml(item: { success?: boolean; file_path?: string; output?: string; exit_code?: number; outputs?: Array<{ type?: string; data?: string; library?: string }> }, index: number): string {
+    let html = '';
+    const label = item.file_path ? `Agent ran: ${item.file_path}` : 'Agent executed code';
+    const cls = item.success ? 'output-success' : 'output-error';
+    if (index > 0) html += '<hr class="output-divider">';
+    html += `<div style="margin-bottom:4px;"><span class="${cls}">${escapeHtml(label)} (exit: ${item.exit_code ?? ''})</span></div>`;
+    if (item.output) html += `<pre class="output-stdout">${escapeHtml(stripAnsi(item.output))}</pre>`;
+    const richList = item.outputs ?? [];
+    if (Array.isArray(richList) && richList.length > 0) {
+      richList.forEach((r, ri) => {
+        const type = r.type || '', d = r.data || '', lib = r.library || '';
+        if (type.startsWith('image/')) html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph"></span> ${lib || 'Chart'} ${ri + 1}</div><img src="data:${type};base64,${d}" alt="Output" /></div>`;
+        else if (type === 'text/html') html += `<div class="rich-output-item"><div class="rich-output-label">${lib || 'HTML'} ${ri + 1}</div><div class="rich-output-html">${d}</div></div>`;
+        else if (type === 'image/svg+xml') html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-paintcan"></span> SVG ${ri + 1}</div><div style="background:white;padding:10px;">${d}</div></div>`;
+      });
+    }
+    return html;
+  }
+
   async function sendChat() {
     const ta = chatInputRef.current;
     if (!ta) return;
@@ -374,61 +467,122 @@ export default function Home() {
     ta.value = '';
     setChatLoading(true);
     chatAbortRef.current = new AbortController();
+    let outputIndex = 0;
     try {
       const res = await fetch(AI_AGENT_URL, {
-        method: 'POST',
-        headers: apiHeaders(),
+        method: 'POST', headers: apiHeaders(),
         body: JSON.stringify({ message: text }),
         signal: chatAbortRef.current.signal,
       });
-      const data = await res.json();
-      const codeOutputs = data.code_outputs ?? data.results ?? [];
-      if (Array.isArray(codeOutputs) && codeOutputs.length > 0) {
-        let html = '';
-        let firstCreatedPath: string | null = null;
-        for (let i = 0; i < codeOutputs.length; i++) {
-          const item = codeOutputs[i] as { success?: boolean; file_path?: string; output?: string; exit_code?: number; outputs?: Array<{ type?: string; data?: string; library?: string }> };
-          const label = item.file_path ? `Agent ran: ${item.file_path}` : 'Agent executed code';
-          const iconCls = item.success ? 'codicon codicon-check' : 'codicon codicon-error';
-          const cls = item.success ? 'output-success' : 'output-error';
-          if (i > 0) html += '<hr class="output-divider" style="border:none;border-top:2px dashed #aaa;margin:10px 0;">';
-          html += `<div style="margin-bottom:4px;"><span class="${cls}">${escapeHtml(label)} (exit: ${item.exit_code ?? ''})</span></div>`;
-          if (item.output) html += `<pre class="output-stdout">${escapeHtml(stripAnsi(item.output))}</pre>`;
-          const richList = item.outputs ?? [];
-          if (Array.isArray(richList) && richList.length > 0) {
-            richList.forEach((r: { type?: string; data?: string; library?: string }, ri: number) => {
-              const type = r.type || '';
-              const d = r.data || '';
-              const lib = r.library || '';
-              if (type.startsWith('image/')) html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph"></span> ${lib || 'Chart'} ${ri + 1}</div><img src="data:${type};base64,${d}" alt="Output" /></div>`;
-              else if (type === 'text/html') html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph-line"></span> ${lib || 'HTML'} ${ri + 1}</div><div class="rich-output-html">${d}</div></div>`;
-              else if (type === 'image/svg+xml') html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-paintcan"></span> SVG ${ri + 1}</div><div style="background:white;padding:10px;">${d}</div></div>`;
-            });
-          }
-          if (item.success && item.file_path && !firstCreatedPath) firstCreatedPath = item.file_path;
-        }
-        setOutputHtml(html || '<span class="output-success">Done</span>');
-        if (firstCreatedPath) {
-          addTab(firstCreatedPath, firstCreatedPath.split('/').pop() || firstCreatedPath);
-          loadFileContent(firstCreatedPath);
-        }
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Agent chưa kết nối. Bật backend agent (port 8001) để sử dụng chat.');
+        throw new Error(`Agent lỗi: ${res.status} ${res.statusText}`);
       }
-      const reply = data.agent_reply ?? data.reply ?? data.message ?? (data.error ? String(data.error) : 'No response');
-      setChatMessages((prev) => prev.filter((m) => !m.isThinking).concat([{ sender: 'ai', text: reply, icon: data.error ? 'error' : 'success' }]));
+      const contentType = res.headers.get('content-type') || '';
+      const isStream = contentType.includes('text/event-stream');
+      if (isStream) {
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response stream');
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '', streamedText = '', hasError = false;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop()!;
+          for (const part of parts) {
+            const lines = part.split('\n');
+            let eventName = '';
+            let dataLine = '';
+            for (const line of lines) {
+              if (line.startsWith('event:')) eventName = line.slice(6).trim();
+              if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+            }
+            if (eventName === 'done') break;
+            if (eventName === 'error' && dataLine) {
+              try { const obj = JSON.parse(dataLine); streamedText = obj.error || 'Agent failed'; } catch { streamedText = dataLine; }
+              hasError = true;
+              break;
+            }
+            if (dataLine) {
+              try {
+                const obj = JSON.parse(dataLine);
+                if (obj.text !== undefined) {
+                  streamedText += obj.text;
+                  flushSync(() => {
+                    setChatMessages((prev) => {
+                      const withoutThinking = prev.filter((m) => !m.isThinking);
+                      const withoutLastAi = withoutThinking.length && withoutThinking[withoutThinking.length - 1].sender === 'ai'
+                        ? withoutThinking.slice(0, -1)
+                        : withoutThinking;
+                      return [...withoutLastAi, { sender: 'ai', text: streamedText }];
+                    });
+                  });
+                }
+              } catch { /* skip */ }
+            }
+          }
+          if (hasError) break;
+        }
+        const finalText = streamedText || 'Xong.';
+        setChatMessages((prev) => {
+          const withoutThinking = prev.filter((m) => !m.isThinking);
+          const withoutLastAi = withoutThinking.length && withoutThinking[withoutThinking.length - 1].sender === 'ai'
+            ? withoutThinking.slice(0, -1)
+            : withoutThinking;
+          return [...withoutLastAi, { sender: 'ai', text: finalText, icon: hasError ? 'error' : 'success' }];
+        });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const reply = data.agent_reply ?? data.reply ?? data.message ?? (data.error ? String(data.error) : '');
+        const codeOutputs = data.code_outputs ?? data.results ?? [];
+        if (Array.isArray(codeOutputs) && codeOutputs.length > 0) {
+          let html = '';
+          codeOutputs.forEach((item: Parameters<typeof buildOutputItemHtml>[0], i: number) => { html += buildOutputItemHtml(item, i); });
+          setOutputHtml(html || '<span class="output-success">Done</span>');
+          setOutputTab('output');
+        }
+        setChatMessages((prev) => prev.filter((m) => !m.isThinking).concat([{ sender: 'ai', text: reply || 'Done.', icon: data.error ? 'error' : 'success' }]));
+      }
       await loadFileTree();
-    } catch (e) {
-      setChatMessages((prev) => prev.filter((m) => !m.isThinking).concat([{ sender: 'ai', text: (e as Error).message, icon: 'error' }]));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isOffline = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed');
+      const friendly = isOffline ? 'Agent chưa kết nối. Bật backend agent (port 8001) để sử dụng chat.' : msg;
+      setChatMessages((prev) => prev.filter((m) => !m.isThinking).concat([{ sender: 'ai', text: friendly, icon: 'error' }]));
     }
     setChatLoading(false);
     chatAbortRef.current = null;
   }
+
+  function stopChat() {
+    if (chatAbortRef.current) {
+      chatAbortRef.current.abort();
+      chatAbortRef.current = null;
+    }
+    setChatMessages((prev) => {
+      const withoutThinking = prev.filter((m) => !m.isThinking);
+      const last = withoutThinking[withoutThinking.length - 1];
+      if (last && last.sender === 'ai' && last.text) return withoutThinking;
+      return [...withoutThinking, { sender: 'ai', text: '(Đã dừng)' }];
+    });
+    setChatLoading(false);
+  }
+
+  // ── Terminal ──────────────────────────────────────────────────────
+
   function openTerminalTab() {
     setTerminalError(null);
     setOutputTab('terminal');
   }
 
+  // FIX #3: guard against multiple terminal instances on rapid tab switching
   useEffect(() => {
     if (outputTab !== 'terminal' || !terminalContainerRef.current) return;
+    // Already mounted — skip
+    if (terminalInstanceRef.current) return;
+
     const container = terminalContainerRef.current;
     const term = new Terminal({
       cursorBlink: true,
@@ -455,20 +609,14 @@ export default function Home() {
       });
     };
     ws.onmessage = (ev) => {
-      if (ev.data instanceof ArrayBuffer) {
-        const str = new TextDecoder().decode(ev.data);
-        term.write(str);
-      } else if (typeof ev.data === 'string') {
-        term.write(ev.data);
-      }
+      if (ev.data instanceof ArrayBuffer) term.write(new TextDecoder().decode(ev.data));
+      else if (typeof ev.data === 'string') term.write(ev.data);
     };
     ws.onerror = () => setTerminalError('WebSocket error');
     ws.onclose = () => setTerminalError('Terminal disconnected');
 
     term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(new TextEncoder().encode(data));
-      }
+      if (ws.readyState === WebSocket.OPEN) ws.send(new TextEncoder().encode(data));
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -488,6 +636,8 @@ export default function Home() {
       terminalInstanceRef.current = null;
     };
   }, [outputTab]);
+
+  // ── Resize ────────────────────────────────────────────────────────
 
   function startResizeFile(e: React.MouseEvent) {
     e.preventDefault();
@@ -511,16 +661,13 @@ export default function Home() {
     if (!resizing) return;
     const onMove = (e: MouseEvent) => {
       if (resizing === 'file') {
-        const delta = e.clientX - resizeStartRef.current.x;
-        setFileTreeWidth(Math.max(80, Math.min(500, resizeStartRef.current.width + delta)));
+        setFileTreeWidth(Math.max(80, Math.min(500, resizeStartRef.current.width + (e.clientX - resizeStartRef.current.x))));
       } else if (resizing === 'chat') {
-        const delta = e.clientX - resizeStartRef.current.x;
-        setChatSectionWidth(Math.max(200, resizeStartRef.current.width - delta));
+        setChatSectionWidth(Math.max(200, resizeStartRef.current.width - (e.clientX - resizeStartRef.current.x)));
       } else if (resizing === 'editor') {
         const totalH = resizeStartRef.current.height;
         if (totalH <= 0) return;
-        const deltaY = e.clientY - resizeStartRef.current.y;
-        const deltaPct = (deltaY / totalH) * 100;
+        const deltaPct = ((e.clientY - resizeStartRef.current.y) / totalH) * 100;
         setEditorFlex(Math.max(15, Math.min(85, resizeStartRef.current.width + deltaPct)));
       }
     };
@@ -536,6 +683,8 @@ export default function Home() {
       document.body.style.userSelect = '';
     };
   }, [resizing]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -554,8 +703,7 @@ export default function Home() {
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasModified = Object.values(fileCache).some((v) => v.modified);
-      if (hasModified) e.preventDefault();
+      if (Object.values(fileCache).some((v) => v.modified)) e.preventDefault();
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -587,6 +735,26 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [sidebarTab, searchPattern]);
 
+  // ── Render Tree ───────────────────────────────────────────────────
+
+  const inlineCreateInput = (level: number) => (
+    <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 + level * 8 }}>
+      <div className="tree-item-content">
+        <span className={`tree-lead-icon codicon codicon-${treeCreateMode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
+        <input
+          ref={treeCreateInputRef}
+          type="text"
+          className="tree-inline-input"
+          placeholder={treeCreateMode === 'file' ? 'File name' : 'Folder name'}
+          value={treeCreateInput}
+          onChange={(e) => setTreeCreateInput(e.target.value)}
+          onBlur={handleCreateBlur}
+          onKeyDown={handleCreateKeyDown}
+        />
+      </div>
+    </div>
+  );
+
   function renderTreeNode(node: TreeNode, level: number, firstLevel: boolean): React.ReactNode {
     const path = node.path || node.name;
     const isDir = node.type === 'directory';
@@ -595,8 +763,10 @@ export default function Home() {
     const isPy = node.type === 'file' && node.name.toLowerCase().endsWith('.py');
     const isSelected = path === selectedTreePath;
     const leadIcon = isDir
-      ? (shouldExpand ? <span className={"tree-lead-icon codicon codicon-chevron-down"} onClick={(e) => { e.stopPropagation(); toggleFolder(path); }} title="Thu gọn" /> : <span className={"tree-lead-icon codicon codicon-chevron-right"} onClick={(e) => { e.stopPropagation(); toggleFolder(path); }} title="Mở rộng" />)
-      : isPy ? <span className={"tree-lead-icon codicon codicon-python"} /> : <span className={"tree-lead-icon codicon codicon-file"} />;
+      ? (shouldExpand
+        ? <span className="tree-lead-icon codicon codicon-chevron-down" onClick={(e) => { e.stopPropagation(); toggleFolder(path); }} title="Thu gọn" />
+        : <span className="tree-lead-icon codicon codicon-chevron-right" onClick={(e) => { e.stopPropagation(); toggleFolder(path); }} title="Mở rộng" />)
+      : isPy ? <span className="tree-lead-icon codicon codicon-python" /> : <span className="tree-lead-icon codicon codicon-file" />;
     const paddingLeft = 8 + level * 8;
 
     if (renameNode?.path === path) {
@@ -604,12 +774,14 @@ export default function Home() {
         <div key={path} className="tree-item" style={{ paddingLeft }}>
           <div className="tree-item-content">
             {leadIcon}
-            <input ref={renameInputRef} type="text" className="tree-inline-input" value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="tree-inline-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
               onBlur={handleRenameBlur}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !chatLoading) renameOnServer(path, (path.split('/').slice(0, -1).join('/') + '/' + renameValue.trim()).replace(/\/+/g, '/'));
-                if (e.key === 'Escape') setRenameNode(null);
-              }}
+              onKeyDown={handleRenameKeyDown}
             />
           </div>
         </div>
@@ -618,7 +790,9 @@ export default function Home() {
 
     return (
       <div key={path}>
-        <div className={`tree-item ${isSelected ? 'selected' : ''}`} style={{ paddingLeft }}
+        <div
+          className={`tree-item ${isSelected ? 'selected' : ''}`}
+          style={{ paddingLeft }}
           onClick={() => {
             setSelectedTreePath(path);
             if (isDir) setSelectedFolder(path);
@@ -627,6 +801,7 @@ export default function Home() {
               if (!isDir && openTabs.some((t) => t.path === path)) switchTab(path);
             } else {
               if (!isDir) { addTab(path, node.name); loadFileContent(path); }
+              else toggleFolder(path);
             }
           }}
           onContextMenu={(e) => { if (chatLoading) return; e.preventDefault(); setContextMenu({ show: true, x: e.clientX, y: e.clientY, node, showNewFile: true, showNewFolder: true }); }}
@@ -639,33 +814,13 @@ export default function Home() {
         </div>
         {(hasChildren || (path === treeCreateParentPath && treeCreateMode) || (isDir && shouldExpand)) && (
           <div className="tree-children" style={{ display: shouldExpand ? 'block' : 'none' }}>
-            {path === treeCreateParentPath && treeCreateMode && !treeCreateBeforePath && (
-              <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 + (level + 1) * 8 }}>
-                <div className="tree-item-content">
-                  <span className={`tree-lead-icon codicon codicon-${treeCreateMode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
-                  <input ref={treeCreateInputRef} type="text" className="tree-inline-input" placeholder={treeCreateMode === 'file' ? 'File name' : 'Folder name'} value={treeCreateInput} onChange={(e) => setTreeCreateInput(e.target.value)}
-                    onBlur={handleCreateBlur}
-                    onKeyDown={(e) => { if (e.key === 'Enter') confirmCreate(); if (e.key === 'Escape') cancelCreate(); }}
-                  />
-                </div>
-              </div>
-            )}
+            {path === treeCreateParentPath && treeCreateMode && !treeCreateBeforePath && inlineCreateInput(level + 1)}
             {node.children?.map((child) => {
               const childPath = child.path || child.name;
               const showCreateBefore = path === treeCreateParentPath && treeCreateMode && treeCreateBeforePath === childPath;
               return (
                 <div key={childPath}>
-                  {showCreateBefore && (
-                    <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 + (level + 1) * 8 }}>
-                      <div className="tree-item-content">
-                        <span className={`tree-lead-icon codicon codicon-${treeCreateMode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
-                        <input ref={treeCreateInputRef} type="text" className="tree-inline-input" placeholder={treeCreateMode === 'file' ? 'File name' : 'Folder name'} value={treeCreateInput} onChange={(e) => setTreeCreateInput(e.target.value)}
-                          onBlur={handleCreateBlur}
-                          onKeyDown={(e) => { if (e.key === 'Enter') confirmCreate(); if (e.key === 'Escape') cancelCreate(); }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                  {showCreateBefore && inlineCreateInput(level + 1)}
                   {renderTreeNode(child, level + 1, false)}
                 </div>
               );
@@ -683,14 +838,7 @@ export default function Home() {
         const showCreateBefore = treeCreateMode && treeCreateParentPath === '' && treeCreateBeforePath === nodePath;
         return (
           <div key={nodePath}>
-            {showCreateBefore && (
-              <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 }}>
-                <div className="tree-item-content">
-                  <span className={`tree-lead-icon codicon codicon-${treeCreateMode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
-                  <input ref={treeCreateInputRef} type="text" className="tree-inline-input" placeholder={treeCreateMode === 'file' ? 'File name' : 'Folder name'} value={treeCreateInput} onChange={(e) => setTreeCreateInput(e.target.value)} onBlur={handleCreateBlur} onKeyDown={(e) => { if (e.key === 'Enter') confirmCreate(); if (e.key === 'Escape') cancelCreate(); }} />
-                </div>
-              </div>
-            )}
+            {showCreateBefore && inlineCreateInput(0)}
             {renderTreeNode(node, 0, true)}
           </div>
         );
@@ -698,12 +846,15 @@ export default function Home() {
 
   const modifiedCount = Object.values(fileCache).filter((v) => v.modified).length;
 
+  // ── JSX ───────────────────────────────────────────────────────────
+
   return (
     <>
       <header>
         <span className="brand">Agent</span>
       </header>
       <div className="container">
+        {/* File Tree */}
         <div style={{ width: fileTreeWidth, minWidth: 80, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="section" id="fileTreeSection">
             <div className="sidebar-toolbar">
@@ -722,14 +873,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div id="fileTree">
-                  {treeCreateMode && treeCreateParentPath === '' && !treeCreateBeforePath && (
-                    <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 }}>
-                      <div className="tree-item-content">
-                        <span className={`tree-lead-icon codicon codicon-${treeCreateMode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
-                        <input ref={treeCreateInputRef} type="text" className="tree-inline-input" placeholder={treeCreateMode === 'file' ? 'File name' : 'Folder name'} value={treeCreateInput} onChange={(e) => setTreeCreateInput(e.target.value)} onBlur={handleCreateBlur} onKeyDown={(e) => { if (e.key === 'Enter') confirmCreate(); if (e.key === 'Escape') cancelCreate(); }} />
-                      </div>
-                    </div>
-                  )}
+                  {treeCreateMode && treeCreateParentPath === '' && !treeCreateBeforePath && inlineCreateInput(0)}
                   {treeContent}
                 </div>
               </div>
@@ -741,24 +885,29 @@ export default function Home() {
                   <input ref={searchInputRef} type="text" className="sidebar-search-input" value={searchPattern} onChange={(e) => setSearchPattern(e.target.value)} placeholder="Search" />
                 </div>
                 <div className="sidebar-search-results">
-                  {searchResults.length === 0 ? <div className="sidebar-search-empty">No files found</div> : searchResults.map((match) => (
-                    <div key={match} className="sidebar-search-item" onClick={() => {
-                      if (chatLoading) { if (openTabs.some((t) => t.path === match)) switchTab(match); return; }
-                      loadFileContent(match);
-                      addTab(match, match.split('/').pop() || match);
-                    }}>
-                      <span className={`codicon ${match.toLowerCase().endsWith('.py') ? 'codicon-python' : 'codicon-file'}`} style={{ marginRight: 6, fontSize: 12 }} />{match}
-                    </div>
-                  ))}
+                  {searchResults.length === 0
+                    ? <div className="sidebar-search-empty">No files found</div>
+                    : searchResults.map((match) => (
+                      <div key={match} className="sidebar-search-item" onClick={() => {
+                        if (chatLoading) { if (openTabs.some((t) => t.path === match)) switchTab(match); return; }
+                        loadFileContent(match);
+                        addTab(match, match.split('/').pop() || match);
+                      }}>
+                        <span className={`codicon ${match.toLowerCase().endsWith('.py') ? 'codicon-python' : 'codicon-file'}`} style={{ marginRight: 6, fontSize: 12 }} />{match}
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
           </div>
         </div>
+
         <div className={`resizer-v ${resizing === 'file' ? 'resizing' : ''}`} onMouseDown={startResizeFile} title="Kéo để đổi độ rộng" />
+
+        {/* Main Editor + Output */}
         <div className="main-content" ref={mainContentRef}>
           <div className="section" id="editorSection" style={{ flex: `${editorFlex} 0 0` }}>
-            {openTabs.length > 0 ? (
+            {openTabs.length > 0 && (
               <>
                 <div className="editor-tabs-bar">
                   <div className="editor-tabs">
@@ -766,12 +915,14 @@ export default function Home() {
                       const cached = fileCache[tab.path];
                       const isModified = cached?.modified;
                       const isPy = tab.name.toLowerCase().endsWith('.py');
-                      const fileIcon = isPy ? 'codicon-python' : 'codicon-file';
                       return (
                         <div key={tab.path} className={`editor-tab ${tab.path === currentFilePath ? 'active' : ''}`} title={tab.path} onClick={() => switchTab(tab.path)} onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.path); } }}>
-                          <span className={`codicon ${fileIcon}`} style={{ fontSize: 12, flexShrink: 0 }} />
-                          <span className="tab-name">{isModified && <span className="codicon codicon-close-dirty" style={{ marginRight: 4 }} />}{tab.name}</span>
-                          <span className="tab-close" onClick={(e) => { e.stopPropagation(); closeTab(tab.path); }}><span className="codicon codicon-close" /></span>
+                          <span className={`codicon ${isPy ? 'codicon-python' : 'codicon-file'}`} style={{ fontSize: 12, flexShrink: 0 }} />
+                          <span className="tab-name">{tab.name}</span>
+                          <span className="tab-close" onClick={(e) => { e.stopPropagation(); closeTab(tab.path); }} title={isModified ? 'Chưa lưu (trỏ vào để đóng)' : undefined}>
+                            {isModified && <span className="tab-unsaved-dot">●</span>}
+                            <span className="codicon codicon-close" />
+                          </span>
                         </div>
                       );
                     })}
@@ -780,65 +931,93 @@ export default function Home() {
                     <button type="button" className="btn-run" onClick={runCode} disabled={runBusy || chatLoading} title={runBusy ? 'Running...' : 'Run'}><div className="spinner" style={{ display: runBusy ? 'inline-block' : 'none' }} /><span className="codicon codicon-play" /></button>
                   </div>
                 </div>
-                <textarea ref={codeAreaRef} id="codeArea" spellCheck={false} value={codeValue} readOnly={chatLoading} onChange={(e) => handleCodeChange(e.target.value)}
+                <textarea
+                  ref={codeAreaRef}
+                  id="codeArea"
+                  spellCheck={false}
+                  value={codeValue}
+                  readOnly={chatLoading}
+                  onChange={(e) => handleCodeChange(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Tab') { e.preventDefault(); const ta = codeAreaRef.current; if (!ta) return; const start = ta.selectionStart, end = ta.selectionEnd; const newVal = ta.value.slice(0, start) + '    ' + ta.value.slice(end); handleCodeChange(newVal); setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + 4; }, 0); }
+                    if (e.key === 'Tab') {
+                      e.preventDefault();
+                      const ta = codeAreaRef.current;
+                      if (!ta) return;
+                      const start = ta.selectionStart, end = ta.selectionEnd;
+                      const newVal = ta.value.slice(0, start) + '    ' + ta.value.slice(end);
+                      handleCodeChange(newVal);
+                      setTimeout(() => { ta.selectionStart = ta.selectionEnd = start + 4; }, 0);
+                    }
                     if (e.ctrlKey && e.key === 'Enter' && !chatLoading) runCode();
                   }}
                 />
               </>
-            ) : null}
+            )}
           </div>
+
           <div className={`resizer-h ${resizing === 'editor' ? 'resizing' : ''}`} onMouseDown={startResizeEditor} title="Kéo để đổi chiều cao" />
+
           <div className="section" id="outputSection" style={{ flex: `${100 - editorFlex} 0 0`, display: 'flex', flexDirection: 'column' }}>
             <div className="output-tabs-bar">
-              <button
-                type="button"
-                className={`output-tab ${outputTab === 'output' ? 'active' : ''}`}
-                onClick={() => setOutputTab('output')}
-              >
-                Output
-              </button>
-              <button
-                type="button"
-                className={`output-tab ${outputTab === 'terminal' ? 'active' : ''}`}
-                onClick={openTerminalTab}
-              >
-                Terminal
-              </button>
+              <button type="button" className={`output-tab ${outputTab === 'output' ? 'active' : ''}`} onClick={() => setOutputTab('output')}>Output</button>
+              <button type="button" className={`output-tab ${outputTab === 'terminal' ? 'active' : ''}`} onClick={openTerminalTab}>Terminal</button>
             </div>
             <div className={`panel-scroll output-panel ${outputTab === 'output' ? '' : 'hidden'}`}>
+              {/* FIX #7: NOTE — for production, wrap outputHtml with DOMPurify before setting */}
               <div id="output" dangerouslySetInnerHTML={{ __html: outputHtml }} />
             </div>
             {outputTab === 'terminal' && (
               <div className="panel-scroll terminal-panel">
-                {terminalError && (
-                  <div className="terminal-status" style={{ padding: 8, color: 'var(--error)', fontSize: 12 }}>{terminalError}</div>
-                )}
+                {terminalError && <div className="terminal-status" style={{ padding: 8, color: 'var(--error)', fontSize: 12 }}>{terminalError}</div>}
                 <div ref={terminalContainerRef} className="xterm-container" style={{ width: '100%', height: '100%', minHeight: 120 }} />
               </div>
             )}
           </div>
         </div>
+
         <div className={`resizer-v ${resizing === 'chat' ? 'resizing' : ''}`} onMouseDown={startResizeChat} title="Kéo để đổi độ rộng" />
+
+        {/* Chat */}
         <div className="section" id="chatSection" style={{ width: chatSectionWidth, minWidth: 200, flex: 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div id="chatMessages">
-            {chatMessages.map((msg, i) => (
-              <div key={i} className={`chat-bubble ${msg.sender} ${msg.isThinking ? 'thinking' : ''}`}>{msg.text}{msg.icon === 'error' && <span className="codicon codicon-error" style={{ marginLeft: 6 }} />}</div>
-            ))}
+            {chatMessages.map((msg, i) =>
+              msg.sender === 'user' ? (
+                <div key={i} className="chat-bubble user">
+                  {msg.text}
+                </div>
+              ) : (
+                <div key={i} className={`chat-ai-text ${msg.isThinking ? 'thinking' : ''}`}>
+                  {msg.text}
+                  {msg.icon === 'error' && <span className="codicon codicon-error" style={{ marginLeft: 6 }} />}
+                </div>
+              )
+            )}
           </div>
           <div className="chat-input-area">
-            <textarea ref={chatInputRef} id="chatInput" placeholder="Ask AI..." rows={2} disabled={chatLoading} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} />
+            <textarea
+              ref={chatInputRef}
+              id="chatInput"
+              placeholder="Ask AI..."
+              rows={2}
+              disabled={chatLoading}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+            />
+            {chatLoading && (
+              <button type="button" className="chat-stop-btn" onClick={stopChat} title="Dừng">
+                <span className="codicon codicon-debug-stop" />
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Context Menu */}
       <div ref={contextMenuRef} className="context-menu" style={{ display: contextMenu.show ? 'block' : 'none', left: contextMenu.x, top: contextMenu.y }}>
         {contextMenu.showNewFile && <div className="context-menu-item" onClick={() => handleContextMenuAction('newFile')}>New File...</div>}
         {contextMenu.showNewFolder && <div className="context-menu-item" onClick={() => handleContextMenuAction('newFolder')}>New Folder...</div>}
         <div className="context-menu-item" onClick={() => handleContextMenuAction('rename')}>Rename...</div>
         <div className="context-menu-item" onClick={() => handleContextMenuAction('delete')}>Delete permanently</div>
       </div>
-
     </>
   );
 }
