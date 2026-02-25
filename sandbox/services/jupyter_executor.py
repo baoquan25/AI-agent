@@ -1,12 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-JupyterKernelExecutor — Execute code via Jupyter kernel in sandbox.
-
-Moved from services/output_executor.py (same logic, new location).
-"""
-
 import json
 import logging
 import uuid

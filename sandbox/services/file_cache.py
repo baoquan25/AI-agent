@@ -1,6 +1,3 @@
-# pyright: basic
-# type: ignore
-
 import hashlib
 import logging
 import time

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, Header
@@ -26,7 +27,8 @@ async def run_code(
     if req.file_path:
         code_to_run = wm.wrap_code(req.code, req.file_path)
 
-    result = _execution_service.run_code(
+    result = await asyncio.to_thread(
+        _execution_service.run_code,
         sandbox, code_to_run, use_jupyter=req.use_jupyter, timeout=req.timeout,
     )
 

@@ -39,7 +39,6 @@ def find_sandbox(user_id: str):
 def get_agent(sandbox):
     llm = ChatOpenAI(
         model="gpt-5-nano",
-        temperature=0.3,
         api_key=OPENAI_API_KEY,
     )
     tools = get_tools(sandbox)

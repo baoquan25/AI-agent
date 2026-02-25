@@ -315,6 +315,8 @@ async def delete_path(
 ):
     sandbox, sid = sb_and_id
     safe_path = _validate_user_path(user_id, path)
+    if not safe_path:
+        raise HTTPException(status_code=400, detail="Cannot delete workspace root")
     try:
         success = await fs.delete_path(safe_path, sandbox)
         if not success:

@@ -1,7 +1,7 @@
-langchain>=1.2.0
-langchain-openai
-langgraph
+langchain
+langchain_openai
 python-dotenv
 daytona
 uvicorn
 fastapi
+daytona

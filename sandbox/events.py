@@ -5,7 +5,6 @@
 Application lifespan — initialise Daytona client, WorkspaceManager, and FilesystemService.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -37,10 +36,7 @@ async def lifespan(app: FastAPI):
 
     app.state.daytona = daytona_client
     app.state.workspace_manager = workspace_manager
-    app.state.filesystem_service = filesystem_service      
-    app.state.user_sandboxes = {}
-    app.state.user_locks: dict = {}     
-    app.state.lock_registry_lock = asyncio.Lock()  
+    app.state.filesystem_service = filesystem_service
 
     yield
 

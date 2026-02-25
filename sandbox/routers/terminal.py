@@ -30,7 +30,8 @@ async def pty_websocket(
     loop = asyncio.get_running_loop()
 
     try:
-        pty_handle = sandbox.process.create_pty_session(
+        pty_handle = await asyncio.to_thread(
+            sandbox.process.create_pty_session,
             id=sid,
             cwd="/home/daytona/workspace",
             envs={"TERM": "xterm-256color"},

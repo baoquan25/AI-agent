@@ -7,6 +7,8 @@ FilesystemService — file operations via Daytona SDK only.
 Paths follow https://www.daytona.io/docs/en/file-system-operations/:
 - "workspace" = sandbox working dir (/home/[username]/workspace)
 - "workspace/relpath" for subpaths. No custom file list; use list_files / get_file_info only.
+
+All blocking Daytona SDK calls run in asyncio.to_thread() to avoid blocking the event loop.
 """
 
 import asyncio
@@ -44,7 +46,7 @@ class FilesystemService:
         try:
             await self.wm.initialize(sandbox)
             sdk_path = _workspace_path(path)
-            files = sandbox.fs.list_files(sdk_path)
+            files = await asyncio.to_thread(sandbox.fs.list_files, sdk_path)
             return [
                 {
                     "name": f.name,
@@ -104,25 +106,39 @@ class FilesystemService:
     async def read_file(self, path: str, sandbox) -> dict[str, Any]:
         try:
             await self.wm.initialize(sandbox)
-            content = sandbox.fs.download_file(_workspace_path(path)).decode("utf-8")
+            raw = await asyncio.to_thread(sandbox.fs.download_file, _workspace_path(path))
+            content = raw.decode("utf-8")
             return {"success": True, "content": content}
         except Exception as e:
             logger.error(f"read_file failed at {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    async def _ensure_workspace_and_parents(self, path: str, sandbox) -> bool:
+        """Ensure workspace dir exists and create parent directories for path."""
+        if not await self.wm.initialize(sandbox):
+            return False
+        parts = path.strip("/").split("/")
+        if len(parts) > 1:
+            parent = "/".join(parts[:-1])
+            try:
+                await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(parent), "755")
+            except Exception:
+                pass
+        return True
+
     async def write_file(self, path: str, content: str, sandbox) -> bool:
         try:
-            if not await self.wm.initialize(sandbox):
+            if not await self._ensure_workspace_and_parents(path, sandbox):
                 return False
             sdk_path = _workspace_path(path)
-            parts = path.strip("/").split("/")
-            if len(parts) > 1:
-                parent = "/".join(parts[:-1])
-                try:
-                    sandbox.fs.create_folder(_workspace_path(parent), "755")
-                except Exception:
-                    pass
-            sandbox.fs.upload_file(content.encode("utf-8"), sdk_path)
+            data = content.encode("utf-8")
+            try:
+                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
+            except Exception:
+                self.wm.invalidate(sandbox)
+                if not await self._ensure_workspace_and_parents(path, sandbox):
+                    return False
+                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             logger.info(f"File saved: {sdk_path}")
             return True
         except Exception as e:
@@ -131,7 +147,7 @@ class FilesystemService:
 
     async def create_file(self, path: str, sandbox, content: str = "") -> bool:
         try:
-            if not await self.wm.initialize(sandbox):
+            if not await self._ensure_workspace_and_parents(path, sandbox):
                 return False
             if not content:
                 if path.endswith(".txt"):
@@ -139,14 +155,14 @@ class FilesystemService:
                 elif path.endswith(".md"):
                     content = "# Markdown Document\n\nCreated by Daytona Editor\n"
             sdk_path = _workspace_path(path)
-            parts = path.strip("/").split("/")
-            if len(parts) > 1:
-                parent = "/".join(parts[:-1])
-                try:
-                    sandbox.fs.create_folder(_workspace_path(parent), "755")
-                except Exception:
-                    pass
-            sandbox.fs.upload_file(content.encode("utf-8"), sdk_path)
+            data = content.encode("utf-8")
+            try:
+                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
+            except Exception:
+                self.wm.invalidate(sandbox)
+                if not await self._ensure_workspace_and_parents(path, sandbox):
+                    return False
+                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             logger.info(f"Created file: {sdk_path}")
             return True
         except Exception as e:
@@ -157,7 +173,7 @@ class FilesystemService:
         try:
             if not await self.wm.initialize(sandbox):
                 return False
-            sandbox.fs.create_folder(_workspace_path(path), mode)
+            await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(path), mode)
             logger.info(f"Created folder: {_workspace_path(path)}")
             return True
         except Exception as e:
@@ -166,12 +182,16 @@ class FilesystemService:
 
     async def delete_path(self, path: str, sandbox) -> bool:
         try:
+            if not path or not path.strip("/"):
+                logger.error("Security: refusing to delete workspace root")
+                return False
             sdk_path = _workspace_path(path)
-            if not sdk_path.startswith("workspace"):
+            if not sdk_path.startswith("workspace/") or sdk_path == "workspace":
                 logger.error(f"Security: delete outside workspace: {sdk_path}")
                 return False
-            sandbox.fs.delete_file(sdk_path, recursive=True)
+            await asyncio.to_thread(sandbox.fs.delete_file, sdk_path, recursive=True)
             logger.info(f"Deleted: {sdk_path}")
+            self.wm.invalidate(sandbox)
             return True
         except Exception as e:
             logger.error(f"delete_path failed at {path}: {e}")
@@ -180,7 +200,7 @@ class FilesystemService:
     async def search_files(self, pattern: str, sandbox, path: str = "") -> list[str]:
         try:
             sdk_path = _workspace_path(path)
-            result = sandbox.fs.search_files(sdk_path, pattern)
+            result = await asyncio.to_thread(sandbox.fs.search_files, sdk_path, pattern)
             files = result.files if hasattr(result, "files") else []
             out = []
             for f in files:
@@ -196,7 +216,7 @@ class FilesystemService:
     async def find_in_files(self, path: str, pattern: str, sandbox) -> list[dict[str, Any]]:
         try:
             sdk_path = _workspace_path(path)
-            matches = sandbox.fs.find_files(sdk_path, pattern)
+            matches = await asyncio.to_thread(sandbox.fs.find_files, sdk_path, pattern)
             result = []
             for match in matches:
                 file_path = getattr(match, "file", "")
@@ -219,7 +239,7 @@ class FilesystemService:
             if not sdk_src.startswith("workspace") or not sdk_dest.startswith("workspace"):
                 logger.error("Security: move outside workspace")
                 return False
-            sandbox.fs.move_files(sdk_src, sdk_dest)
+            await asyncio.to_thread(sandbox.fs.move_files, sdk_src, sdk_dest)
             logger.info(f"Moved: {sdk_src} -> {sdk_dest}")
             return True
         except Exception as e:
@@ -228,7 +248,7 @@ class FilesystemService:
 
     async def get_file_info(self, path: str, sandbox) -> dict[str, Any]:
         try:
-            info = sandbox.fs.get_file_info(_workspace_path(path))
+            info = await asyncio.to_thread(sandbox.fs.get_file_info, _workspace_path(path))
             return {
                 "name": info.name,
                 "path": path,
@@ -248,7 +268,10 @@ class FilesystemService:
                                    owner: Optional[str] = None,
                                    group: Optional[str] = None) -> bool:
         try:
-            sandbox.fs.set_file_permissions(_workspace_path(path), mode=mode, owner=owner, group=group)
+            await asyncio.to_thread(
+                sandbox.fs.set_file_permissions, _workspace_path(path),
+                mode=mode, owner=owner, group=group
+            )
             return True
         except Exception as e:
             logger.error(f"set_file_permissions failed at {path}: {e}")
@@ -260,7 +283,7 @@ class FilesystemService:
         """Replace text in files via sandbox.fs.replace_in_files (doc: replace_in_files)."""
         try:
             sdk_files = [_workspace_path(f) for f in files]
-            results = sandbox.fs.replace_in_files(sdk_files, pattern, new_value)
+            results = await asyncio.to_thread(sandbox.fs.replace_in_files, sdk_files, pattern, new_value)
             out = []
             for r in results:
                 file_path = getattr(r, "file", "")

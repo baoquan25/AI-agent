@@ -1,6 +1,5 @@
-export const API_BASE = 'http://localhost:8000';
-export const AI_AGENT_URL = 'http://localhost:8001/agent/chat';
-
+import { API_BASE } from './constants';
+export { API_BASE, AI_AGENT_URL } from './constants';
 
 export function getTerminalWsUrl(): string {
   const base = API_BASE.replace(/^http/, 'ws');

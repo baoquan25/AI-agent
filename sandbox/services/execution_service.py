@@ -1,6 +1,3 @@
-# pyright: basic
-# type: ignore
-
 import logging
 from typing import Any
 

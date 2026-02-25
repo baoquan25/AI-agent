@@ -1,16 +1,27 @@
+import asyncio
 import os
+import time
 import logging
 
 logger = logging.getLogger(__name__)
 
+_INIT_TTL = 60  # seconds — skip create_folder if workspace was confirmed recently
+
 
 class WorkspaceManager:
-    """Manages the workspace directory inside a Daytona sandbox."""
+    """
+    Manages the workspace directory inside a Daytona sandbox.
+
+    Uses a lightweight TTL cache (sandbox_id → timestamp) to avoid calling
+    create_folder on every single request. The cache is bounded by the number
+    of active sandboxes (not total users) and entries expire after _INIT_TTL seconds.
+    """
+
+    SDK_PATH = "workspace"
 
     def __init__(self, base_path: str = "/home/daytona/workspace"):
         self.base_path = base_path
-        # Track initialized per sandbox_id (not a single bool)
-        self._initialized_sandboxes: set[str] = set()
+        self._init_cache: dict[str, float] = {}
 
     def get_path(self, relative_path: str = "") -> str:
         """Resolve a relative path inside the workspace to an absolute path."""
@@ -28,35 +39,59 @@ class WorkspaceManager:
         abs_dir = f"{self.base_path}/{dir_part}".replace("//", "/")
         return f"import os\nos.chdir({repr(abs_dir)})\n{code}"
 
-    async def initialize(self, sandbox) -> bool:
-        """Create the workspace directory if not already done for this sandbox."""
+    async def initialize(self, sandbox, force: bool = False) -> bool:
+        """
+        Ensure workspace directory exists. Idempotent (toolbox uses MkdirAll).
+        Skips the API call if workspace was confirmed within the last _INIT_TTL seconds.
+        Retries up to 3 times with backoff on any error.
+        """
         sandbox_id = getattr(sandbox, "id", None)
-        if sandbox_id and sandbox_id in self._initialized_sandboxes:
+        now = time.monotonic()
+
+        if not force and sandbox_id and self._init_cache.get(sandbox_id, 0) + _INIT_TTL > now:
             return True
-        try:
-            sandbox.fs.create_folder(self.base_path, "755")
-            if sandbox_id:
-                self._initialized_sandboxes.add(sandbox_id)
-            logger.info(f"Workspace initialized: {self.base_path} (sandbox={sandbox_id})")
-            return True
-        except Exception as e:
-            error_msg = str(e) or "Empty error - sandbox fs API may be unreachable"
-            logger.error(f"Failed to initialize workspace: [{type(e).__name__}] {error_msg}")
+
+        last_error = None
+        for attempt in range(1, 4):
             try:
-                logger.error(f"  Sandbox ID: {sandbox_id}, State: {getattr(sandbox, 'state', 'unknown')}")
-            except Exception:
-                pass
-            return False
+                await asyncio.to_thread(sandbox.fs.create_folder, self.SDK_PATH, "755")
+                logger.info("Workspace initialized: %s (sandbox=%s)", self.SDK_PATH, sandbox_id)
+                if sandbox_id:
+                    self._init_cache[sandbox_id] = now
+                    if len(self._init_cache) > 10_000:
+                        cutoff = now - _INIT_TTL * 2
+                        self._init_cache = {k: v for k, v in self._init_cache.items() if v > cutoff}
+                return True
+            except Exception as e:
+                last_error = e
+                if attempt < 3:
+                    wait = attempt * 2
+                    logger.warning(
+                        "Workspace init attempt %s/3 failed: %s — retrying in %ss",
+                        attempt, str(e)[:200], wait,
+                    )
+                    await asyncio.sleep(wait)
+
+        logger.error(
+            "Failed to initialize workspace: %s (sandbox=%s state=%s)",
+            last_error, sandbox_id, getattr(sandbox, "state", "unknown"),
+        )
+        return False
+
+    def invalidate(self, sandbox) -> None:
+        """Invalidate TTL cache for this sandbox, forcing re-init on next request."""
+        sandbox_id = getattr(sandbox, "id", None)
+        if sandbox_id:
+            self._init_cache.pop(sandbox_id, None)
 
     async def cleanup(self, sandbox) -> bool:
-        """Delete the entire workspace using the same SDK method as FilesystemService."""
+        """Delete the entire workspace (SDK path 'workspace')."""
         sandbox_id = getattr(sandbox, "id", None)
-        sdk_path = "workspace"  # SDK path (no leading slash), mirrors _workspace_path("")
         try:
-            sandbox.fs.delete_file(sdk_path, recursive=True)
-            self._initialized_sandboxes.discard(sandbox_id)
-            logger.info(f"Workspace cleaned: {self.base_path} (sandbox={sandbox_id})")
+            await asyncio.to_thread(sandbox.fs.delete_file, self.SDK_PATH, recursive=True)
+            self.invalidate(sandbox)
+            logger.info("Workspace cleaned: %s (sandbox=%s)", self.SDK_PATH, sandbox_id)
             return True
         except Exception as e:
-            logger.error(f"Workspace cleanup failed: {e}")
+            logger.error("Workspace cleanup failed: %s", e)
             return False
