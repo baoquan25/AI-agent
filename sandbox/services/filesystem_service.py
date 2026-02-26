@@ -1,36 +1,80 @@
-# pyright: basic
-# type: ignore
-
-"""
-FilesystemService — file operations via Daytona SDK only.
-
-Paths follow https://www.daytona.io/docs/en/file-system-operations/:
-- "workspace" = sandbox working dir (/home/[username]/workspace)
-- "workspace/relpath" for subpaths. No custom file list; use list_files / get_file_info only.
-
-All blocking Daytona SDK calls run in asyncio.to_thread() to avoid blocking the event loop.
-"""
+# filesystem_service.py
 
 import asyncio
 import logging
+import posixpath
 from typing import Any, Optional
 
 from workspace_manager import WorkspaceManager
 
 logger = logging.getLogger("daytona-api")
 
+MAX_PATH_LEN = 4096    # bytes — Linux PATH_MAX
+MAX_SEGMENT_LEN = 255  # bytes — Linux NAME_MAX
+
+
+def normalize_path(path: str) -> str:
+
+    path = path.strip().strip("/")
+
+    if "\x00" in path:
+        raise ValueError(f"Invalid characters in path: {path!r}")
+
+    if not path:
+        return ""
+
+    normalized = posixpath.normpath(path.replace("\\", "/"))
+
+    if normalized in (".", "..") or normalized.startswith("..") or normalized.startswith("/"):
+        raise ValueError(f"Invalid path: {path!r}")
+
+    parts = normalized.split("/")
+    if ".." in parts:
+        raise ValueError(f"Path traversal not allowed: {path!r}")
+
+    if len(normalized.encode()) > MAX_PATH_LEN:
+        raise ValueError(f"Path too long (max {MAX_PATH_LEN} bytes): {normalized[:80]!r}…")
+    for segment in parts:
+        if len(segment.encode()) > MAX_SEGMENT_LEN:
+            raise ValueError(
+                f"Path segment too long (max {MAX_SEGMENT_LEN} bytes): {segment[:40]!r}…"
+            )
+
+    return normalized
+
+
 
 def _workspace_path(relative_path: str = "") -> str:
-    """Path for SDK: doc uses 'workspace' or 'workspace/...' (no leading slash)."""
     p = (relative_path or "").strip().strip("/")
     return f"workspace/{p}" if p else "workspace"
 
 
-class FilesystemService:
-    """File system operations via sandbox.fs (list_files, get_file_info, etc.)."""
+def _is_binary_blob(raw: bytes) -> bool:
+    """Heuristic: null byte or many non-text bytes in a sample → treat as binary."""
+    if b"\x00" in raw:
+        return True
+    sample = raw[:8192] if len(raw) > 8192 else raw
+    if not sample:
+        return False
+    # Count bytes that are not printable ASCII or common whitespace/newline.
+    non_text = sum(1 for b in sample if b < 0x20 and b not in (0x09, 0x0A, 0x0D))
+    if non_text > len(sample) * 0.05:
+        return True
+    return False
 
+
+def _decode_text(raw: bytes) -> tuple[str, str]:
+    """Decode bytes as text; use errors='replace' so we never raise on bad input."""
+    try:
+        return raw.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return raw.decode("utf-8", errors="replace"), "utf-8 (replaced)"
+
+
+class FilesystemService:
     def __init__(self, workspace_manager: WorkspaceManager):
         self.wm = workspace_manager
+        self._created_dirs: dict[str, set[str]] = {}
 
     async def initialize(self, sandbox) -> bool:
         return await self.wm.initialize(sandbox)
@@ -64,6 +108,7 @@ class FilesystemService:
 
     async def get_tree(self, path: str, sandbox, max_depth: int = 4) -> dict[str, Any]:
         """Build tree; runs blocking SDK calls in a thread to avoid blocking the event loop."""
+        await self.wm.initialize(sandbox)
         sdk_path = _workspace_path(path)
         rel_base = path or ""
 
@@ -105,29 +150,72 @@ class FilesystemService:
 
     async def read_file(self, path: str, sandbox) -> dict[str, Any]:
         try:
+            if not path or not path.strip("/"):
+                return {"success": False, "error": "read_file: path must not be empty"}
             await self.wm.initialize(sandbox)
             raw = await asyncio.to_thread(sandbox.fs.download_file, _workspace_path(path))
-            content = raw.decode("utf-8")
-            return {"success": True, "content": content}
+
+            # Avoid decoding binary or non-UTF-8 as UTF-8 (crashes / mojibake).
+            is_binary = _is_binary_blob(raw)
+            if is_binary:
+                return {
+                    "success": True,
+                    "content": "",
+                    "is_binary": True,
+                    "encoding": "binary",
+                }
+            content, encoding = _decode_text(raw)
+            return {
+                "success": True,
+                "content": content,
+                "is_binary": False,
+                "encoding": encoding,
+            }
         except Exception as e:
             logger.error(f"read_file failed at {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    def _reset_dir_cache(self, sandbox) -> None:
+        sid = getattr(sandbox, "id", None)
+        if sid:
+            self._created_dirs.pop(sid, None)
+
+    def _dirs_for(self, sandbox) -> set[str]:
+        sid = getattr(sandbox, "id", None)
+        if not sid:
+            return set()
+        if sid not in self._created_dirs:
+            self._created_dirs[sid] = set()
+        return self._created_dirs[sid]
+
+    async def _create_dir_if_needed(self, dir_path: str, sandbox) -> None:
+        dirs = self._dirs_for(sandbox)
+        if dir_path in dirs:
+            return
+        try:
+            await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(dir_path), "755")
+        except Exception:
+            pass  # already exists → treat as success
+        dirs.add(dir_path)
+
     async def _ensure_workspace_and_parents(self, path: str, sandbox) -> bool:
-        """Ensure workspace dir exists and create parent directories for path."""
         if not await self.wm.initialize(sandbox):
             return False
         parts = path.strip("/").split("/")
-        if len(parts) > 1:
-            parent = "/".join(parts[:-1])
-            try:
-                await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(parent), "755")
-            except Exception:
-                pass
+        dir_parts = parts[:-1]
+        if not dir_parts:
+            return True
+        # Create parents in order so that "a" exists before "a/b" (SDK may require it).
+        for i in range(1, len(dir_parts) + 1):
+            dir_path = "/".join(dir_parts[:i])
+            await self._create_dir_if_needed(dir_path, sandbox)
         return True
 
     async def write_file(self, path: str, content: str, sandbox) -> bool:
         try:
+            if not path or not path.strip("/"):
+                logger.error("write_file: path must not be empty (cannot write to workspace root directory)")
+                return False
             if not await self._ensure_workspace_and_parents(path, sandbox):
                 return False
             sdk_path = _workspace_path(path)
@@ -136,10 +224,10 @@ class FilesystemService:
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             except Exception:
                 self.wm.invalidate(sandbox)
+                self._reset_dir_cache(sandbox)
                 if not await self._ensure_workspace_and_parents(path, sandbox):
                     return False
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
-            logger.info(f"File saved: {sdk_path}")
             return True
         except Exception as e:
             logger.error(f"write_file failed at {path}: {e}")
@@ -147,6 +235,9 @@ class FilesystemService:
 
     async def create_file(self, path: str, sandbox, content: str = "") -> bool:
         try:
+            if not path or not path.strip("/"):
+                logger.error("create_file: path must not be empty (cannot create file at workspace root directory)")
+                return False
             if not await self._ensure_workspace_and_parents(path, sandbox):
                 return False
             if not content:
@@ -160,10 +251,10 @@ class FilesystemService:
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             except Exception:
                 self.wm.invalidate(sandbox)
+                self._reset_dir_cache(sandbox)
                 if not await self._ensure_workspace_and_parents(path, sandbox):
                     return False
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
-            logger.info(f"Created file: {sdk_path}")
             return True
         except Exception as e:
             logger.error(f"create_file failed at {path}: {e}")
@@ -174,7 +265,6 @@ class FilesystemService:
             if not await self.wm.initialize(sandbox):
                 return False
             await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(path), mode)
-            logger.info(f"Created folder: {_workspace_path(path)}")
             return True
         except Exception as e:
             logger.error(f"create_folder failed at {path}: {e}")
@@ -190,8 +280,8 @@ class FilesystemService:
                 logger.error(f"Security: delete outside workspace: {sdk_path}")
                 return False
             await asyncio.to_thread(sandbox.fs.delete_file, sdk_path, recursive=True)
-            logger.info(f"Deleted: {sdk_path}")
             self.wm.invalidate(sandbox)
+            self._reset_dir_cache(sandbox)
             return True
         except Exception as e:
             logger.error(f"delete_path failed at {path}: {e}")
@@ -240,7 +330,8 @@ class FilesystemService:
                 logger.error("Security: move outside workspace")
                 return False
             await asyncio.to_thread(sandbox.fs.move_files, sdk_src, sdk_dest)
-            logger.info(f"Moved: {sdk_src} -> {sdk_dest}")
+            self.wm.invalidate(sandbox)
+            self._reset_dir_cache(sandbox)
             return True
         except Exception as e:
             logger.error(f"move_files failed: {e}")

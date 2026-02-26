@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback, useMemo } from 'react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { Resizer } from '../components/layout/Resizer';
@@ -53,11 +53,14 @@ export default function Home() {
 
   const resize = useResize();
 
-  const handleCloseTab = (path: string) => {
-    const cached = fileTabs.fileCache[path];
-    if (cached?.modified && !confirm(`"${path.split('/').pop()}" has unsaved changes. Close anyway?`)) return;
-    fileTabs.closeTab(path);
-  };
+  const handleCloseTab = useCallback(
+    (path: string) => {
+      const cached = fileTabs.fileCache[path];
+      if (cached?.modified && !confirm(`"${path.split('/').pop()}" has unsaved changes. Close anyway?`)) return;
+      fileTabs.closeTab(path);
+    },
+    [fileTabs.fileCache, fileTabs.closeTab]
+  );
 
   useKeyboardShortcuts({
     saveAllFiles: fileContent.saveAllFiles,
@@ -82,7 +85,10 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [fileTree.contextMenu.show, fileTree.setContextMenu]);
 
-  const modifiedCount = Object.values(fileTabs.fileCache).filter((v) => v.modified).length;
+  const modifiedCount = useMemo(
+    () => Object.values(fileTabs.fileCache).filter((v) => v.modified).length,
+    [fileTabs.fileCache]
+  );
 
   const handleRun = () => {
     runCode.runCode(fileContent.codeValue, fileTabs.currentFilePath);

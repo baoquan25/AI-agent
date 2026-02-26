@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 
 export function useResize() {
   const [fileTreeWidth, setFileTreeWidth] = useState(270);
-  const [chatSectionWidth, setChatSectionWidth] = useState(320);
+  const [chatSectionWidth, setChatSectionWidth] = useState(350);
   const [editorFlex, setEditorFlex] = useState(65);
   const [resizing, setResizing] = useState<'file' | 'chat' | 'editor' | null>(null);
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });

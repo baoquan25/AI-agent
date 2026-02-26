@@ -25,7 +25,6 @@ def get_daytona() :
         )
     return Daytona(config)
 
-
 def find_sandbox(user_id: str):
     daytona = get_daytona()
     try:
@@ -57,7 +56,6 @@ async def llm_answer(user_input: str, user_id: str = "default_user") -> str:
     if messages:
         return messages[-1].content
     return "No response from agent."
-
 
 async def llm_answer(user_input: str, user_id: str = "default_user") -> str:
     sandbox = find_sandbox(user_id)

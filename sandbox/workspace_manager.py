@@ -55,7 +55,6 @@ class WorkspaceManager:
         for attempt in range(1, 4):
             try:
                 await asyncio.to_thread(sandbox.fs.create_folder, self.SDK_PATH, "755")
-                logger.info("Workspace initialized: %s (sandbox=%s)", self.SDK_PATH, sandbox_id)
                 if sandbox_id:
                     self._init_cache[sandbox_id] = now
                     if len(self._init_cache) > 10_000:
@@ -90,7 +89,6 @@ class WorkspaceManager:
         try:
             await asyncio.to_thread(sandbox.fs.delete_file, self.SDK_PATH, recursive=True)
             self.invalidate(sandbox)
-            logger.info("Workspace cleaned: %s (sandbox=%s)", self.SDK_PATH, sandbox_id)
             return True
         except Exception as e:
             logger.error("Workspace cleanup failed: %s", e)

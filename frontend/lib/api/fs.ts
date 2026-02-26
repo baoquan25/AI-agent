@@ -12,6 +12,19 @@ export async function loadTree(): Promise<TreeNode | null> {
   }
 }
 
+export type ListFileItem = { name: string; path: string; type: 'file' | 'directory'; size?: number; modified?: string };
+
+export async function loadList(path: string = ''): Promise<ListFileItem[] | null> {
+  try {
+    const q = path ? `?path=${encodeURIComponent(path)}` : '';
+    const res = await fetch(`${API_BASE}/fs/list${q}`, { headers: apiHeaders() });
+    const data = await res.json();
+    return data.success && Array.isArray(data.files) ? data.files : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getFileContent(path: string): Promise<{ success: boolean; content?: string; detail?: string }> {
   const res = await fetch(`${API_BASE}/fs/file/content?path=${encodeURIComponent(path)}`, { headers: apiHeaders() });
   return res.json();

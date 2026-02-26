@@ -1,13 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-Sandbox FastAPI dependencies — stateless, production-ready.
-
-No in-memory cache or per-user locks. Each request resolves sandbox via Daytona API
-(find by label or create). Scales horizontally for large user counts.
-"""
-
 import asyncio
 import logging
 
@@ -20,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 _LABEL_KEY = "app-user-id"
 
-# Lazy-loaded sandbox state enums (avoid import at module load)
 _STARTING_STATES = None
 _USABLE_STATES = None
 
@@ -43,9 +32,7 @@ def _ensure_sandbox_started(sandbox, timeout: float = 60) -> bool:
         return True
     if state in starting:
         try:
-            logger.info("Sandbox %s is STARTING — waiting for ready...", sandbox.id)
             sandbox.wait_for_sandbox_start(timeout=timeout)
-            logger.info("Sandbox %s is STARTED", sandbox.id)
             return True
         except Exception as e:
             logger.error("Sandbox %s failed to start: %s", sandbox.id, e)
@@ -70,7 +57,6 @@ def _find_existing_sandbox(daytona_client, user_id: str):
         starting, usable = _get_sandbox_states()
         sandbox = daytona_client.find_one(labels={_LABEL_KEY: user_id})
         state = getattr(sandbox, "state", None)
-        logger.info("Found sandbox for %s: id=%s state=%s", user_id, sandbox.id, state)
 
         if state in usable:
             return sandbox
@@ -79,19 +65,12 @@ def _find_existing_sandbox(daytona_client, user_id: str):
                 return sandbox
             logger.warning("Sandbox %s did not reach STARTED in time", sandbox.id)
             return None
-        logger.info("Sandbox %s not usable (state=%s)", sandbox.id, state)
         return None
     except Exception as e:
-        logger.info("No existing sandbox for %s: %s", user_id, e)
         return None
 
 
 async def resolve_sandbox(app_state, user_id: str):
-    """
-    Stateless resolve: find by label or create. No in-memory cache or locks.
-    Safe for horizontal scaling (1 user = 1 sandbox via Daytona labels).
-    All blocking Daytona SDK calls run in a thread to avoid blocking the event loop.
-    """
     daytona_client = app_state.daytona
     if not daytona_client:
         raise RuntimeError("Daytona not initialized")
@@ -100,9 +79,7 @@ async def resolve_sandbox(app_state, user_id: str):
     if not sandbox:
         try:
             sandbox = await asyncio.to_thread(_create_sandbox, daytona_client, user_id)
-            logger.info("Created sandbox for %s: %s", user_id, sandbox.id)
         except Exception as e:
-            # Concurrent request may have created it (e.g. same user, two tabs)
             logger.warning("Create failed for %s (%s), retrying find_one", user_id, e)
             sandbox = await asyncio.to_thread(_find_existing_sandbox, daytona_client, user_id)
             if not sandbox:

@@ -21,7 +21,6 @@ async def run_code(
     wm=Depends(get_workspace_manager),
 ):
     sandbox, sandbox_id = sandbox_and_id
-    logger.info(f"run sandbox={sandbox_id}")
 
     code_to_run = req.code
     if req.file_path:

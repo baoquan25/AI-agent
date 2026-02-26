@@ -1,7 +1,10 @@
+# file_cache.py
+
+import asyncio
 import hashlib
 import logging
+import posixpath
 import time
-import threading
 from collections import OrderedDict
 from typing import Any, Optional
 from dataclasses import dataclass
@@ -25,11 +28,11 @@ class FileCache:
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
         self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
-        self._lock = threading.RLock()
+        self._lock = asyncio.Lock()
         self._stats = {"hits": 0, "misses": 0, "evictions": 0, "expirations": 0}
 
-    def get(self, key: str) -> Optional[CacheEntry]:
-        with self._lock:
+    async def get(self, key: str) -> Optional[CacheEntry]:
+        async with self._lock:
             if key not in self._cache:
                 self._stats["misses"] += 1
                 return None
@@ -43,8 +46,8 @@ class FileCache:
             self._stats["hits"] += 1
             return entry
 
-    def set(self, key: str, etag: str, modified: str) -> None:
-        with self._lock:
+    async def set(self, key: str, etag: str, modified: str) -> None:
+        async with self._lock:
             if key in self._cache:
                 self._cache[key] = CacheEntry(etag=etag, modified=modified, timestamp=time.time())
                 self._cache.move_to_end(key)
@@ -55,15 +58,15 @@ class FileCache:
                 logger.debug(f"Cache eviction: {oldest_key}")
             self._cache[key] = CacheEntry(etag=etag, modified=modified, timestamp=time.time())
 
-    def invalidate(self, key: str) -> bool:
-        with self._lock:
+    async def invalidate(self, key: str) -> bool:
+        async with self._lock:
             if key in self._cache:
                 del self._cache[key]
                 return True
             return False
 
-    def invalidate_prefix(self, prefix: str) -> int:
-        with self._lock:
+    async def invalidate_prefix(self, prefix: str) -> int:
+        async with self._lock:
             prefix_slash = prefix if prefix.endswith("/") else prefix + "/"
             prefix_colon = prefix + ":"
             keys_to_delete = [
@@ -76,25 +79,56 @@ class FileCache:
                 del self._cache[key]
             return len(keys_to_delete)
 
-    def invalidate_user(self, user_id: str) -> int:
-        return self.invalidate_prefix(f"{user_id}:")
+    async def invalidate_user(self, user_id: str) -> int:
+        return await self.invalidate_prefix(f"{user_id}:")
 
-    def clear(self) -> int:
-        with self._lock:
+    async def invalidate_by_path(self, rel_path: str) -> int:
+        """Invalidate all entries matching a relative path and its descendants, across all users.
+
+        Used by the file watcher: when a directory (e.g. src) is modified/deleted,
+        we must invalidate both user1:src and user1:src/a.py, user2:src/b.py, etc.
+        Key format is "{user_id}:{path}"; we match exact path or path + "/" prefix.
+        """
+        if not rel_path:
+            return 0
+        rel_path = posixpath.normpath(rel_path.replace("\\", "/")).strip("/")
+        if rel_path in ("", "."):
+            return 0
+
+        async with self._lock:
+            keys_to_delete = []
+            for k in self._cache:
+                # key format: "{user_id}:{path}"
+                _, sep, cached_path = k.partition(":")
+                if not sep:
+                    continue
+                if cached_path == rel_path or cached_path.startswith(rel_path + "/"):
+                    keys_to_delete.append(k)
+            for key in keys_to_delete:
+                del self._cache[key]
+            if keys_to_delete:
+                logger.debug(
+                    "File watcher invalidated %d cache entries for path: %s",
+                    len(keys_to_delete), rel_path,
+                )
+            return len(keys_to_delete)
+
+    async def clear(self) -> int:
+        async with self._lock:
             count = len(self._cache)
             self._cache.clear()
             return count
 
-    def cleanup_expired(self) -> int:
-        with self._lock:
+    async def cleanup_expired(self) -> int:
+        async with self._lock:
             expired_keys = [k for k, v in self._cache.items() if v.is_expired(self.ttl_seconds)]
             for key in expired_keys:
                 del self._cache[key]
                 self._stats["expirations"] += 1
             return len(expired_keys)
 
-    def get_stats(self) -> dict[str, Any]:
-        with self._lock:
+    async def get_stats(self) -> dict[str, Any]:
+        async with self._lock:
             total_requests = self._stats["hits"] + self._stats["misses"]
             hit_rate = (self._stats["hits"] / total_requests * 100) if total_requests > 0 else 0
             return {
@@ -120,6 +154,13 @@ def generate_etag_from_metadata(modified: str, size: int) -> str:
 
 
 def get_cache_key(user_id: str, path: str) -> str:
+    """Return a normalized cache key so that equivalent paths always map to the same key."""
+    if path:
+        # Normalize slashes and collapse . / .. segments defensively,
+        # even if the caller has already validated the path.
+        path = posixpath.normpath(path.replace("\\", "/")).strip("/")
+        if path == ".":
+            path = ""
     return f"{user_id}:{path}"
 
 
