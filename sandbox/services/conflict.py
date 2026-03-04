@@ -23,23 +23,31 @@ def check_write_conflict(
         if current_modified == base_mtime:
             return ConflictResult(conflict=False)
 
+        # Stage 2 — the file's mtime changed; check if the content also changed
+        # relative to what the client last read (expected_etag was built from
+        # base_mtime + size at read time).
         vscode_etag = generate_etag_from_metadata(base_mtime, current_size)
         if vscode_etag != expected_etag:
             return ConflictResult(
                 conflict=True,
                 reason=(
-                    "File size changed since last read — "
+                    "File metadata changed since last read — "
                     "another process has modified this file."
                 ),
                 current_etag=current_etag,
             )
         return ConflictResult(conflict=False)
 
-    # Stage 3 — strict fallback (no base_mtime supplied): flag on ANY change.
+    # Stage 3 — strict fallback (no base_mtime supplied): flag on ANY metadata
+    # change.  This is intentionally strict; callers that want optimistic
+    # concurrency should supply base_mtime.
     if current_etag != expected_etag:
         return ConflictResult(
             conflict=True,
-            reason="File was modified by another tab or user.",
+            reason=(
+                "File metadata changed since last read — "
+                "another process has modified this file."
+            ),
             current_etag=current_etag,
         )
     return ConflictResult(conflict=False)

@@ -1,5 +1,7 @@
 # file_cache.py
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
@@ -83,33 +85,53 @@ class FileCache:
         return await self.invalidate_prefix(f"{user_id}:")
 
     async def invalidate_by_path(self, rel_path: str) -> int:
-        """Invalidate all entries matching a relative path and its descendants, across all users.
-
-        Used by the file watcher: when a directory (e.g. src) is modified/deleted,
-        we must invalidate both user1:src and user1:src/a.py, user2:src/b.py, etc.
-        Key format is "{user_id}:{path}"; we match exact path or path + "/" prefix.
+        """Invalidate all entries for a single path.  Prefer invalidate_by_paths()
+        for batches — it scans the cache only once for the whole set.
         """
         if not rel_path:
             return 0
-        rel_path = posixpath.normpath(rel_path.replace("\\", "/")).strip("/")
-        if rel_path in ("", "."):
+        return await self.invalidate_by_paths({rel_path})
+
+    async def invalidate_by_paths(self, rel_paths: set[str]) -> int:
+        """Batch invalidation: scan the cache O(N) once for the entire set of paths.
+
+        Used by EventBroadcaster after coalescing so burst events (git checkout,
+        npm install) only trigger a single cache scan instead of one per raw event.
+
+        Key format is "{user_id}:{path}"; matches exact path and all descendants.
+        """
+        if not rel_paths:
             return 0
 
+        # Normalise all paths upfront so the hot loop is cheap.
+        normalised: set[str] = set()
+        for p in rel_paths:
+            p = posixpath.normpath(p.replace("\\", "/")).strip("/")
+            if p and p != ".":
+                normalised.add(p)
+        if not normalised:
+            return 0
+
+        # Sort by length so that parent prefixes come first (used for fast prune
+        # if we later want to short-circuit child paths — currently we just match).
+        prefix_list = sorted(normalised, key=len)
+
         async with self._lock:
-            keys_to_delete = []
+            keys_to_delete: list[str] = []
             for k in self._cache:
-                # key format: "{user_id}:{path}"
                 _, sep, cached_path = k.partition(":")
                 if not sep:
                     continue
-                if cached_path == rel_path or cached_path.startswith(rel_path + "/"):
-                    keys_to_delete.append(k)
+                for p in prefix_list:
+                    if cached_path == p or cached_path.startswith(p + "/"):
+                        keys_to_delete.append(k)
+                        break  # matched — no need to check other prefixes
             for key in keys_to_delete:
                 del self._cache[key]
             if keys_to_delete:
                 logger.debug(
-                    "File watcher invalidated %d cache entries for path: %s",
-                    len(keys_to_delete), rel_path,
+                    "File watcher batch-invalidated %d cache entries for %d paths",
+                    len(keys_to_delete), len(normalised),
                 )
             return len(keys_to_delete)
 

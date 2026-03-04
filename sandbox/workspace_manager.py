@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import os
 import time
@@ -54,7 +56,9 @@ class WorkspaceManager:
         last_error = None
         for attempt in range(1, 4):
             try:
+                t0 = time.monotonic()
                 await asyncio.to_thread(sandbox.fs.create_folder, self.SDK_PATH, "755")
+                logger.info("wm.initialize sdk=%.0fms (attempt %d)", (time.monotonic()-t0)*1000, attempt)
                 if sandbox_id:
                     self._init_cache[sandbox_id] = now
                     if len(self._init_cache) > 10_000:

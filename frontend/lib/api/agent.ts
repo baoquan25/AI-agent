@@ -1,26 +1,32 @@
-import { AI_AGENT_URL } from '../constants';
+import { AGENT_BASE } from '../constants';
 import { apiHeaders } from '../utils';
 
-export type ChatResponse = {
-  agent_reply?: string;
-  reply?: string;
-  message?: string;
-  error?: string;
-  code_outputs?: Array<{
-    success?: boolean;
-    file_path?: string;
-    output?: string;
-    exit_code?: number;
-    outputs?: Array<{ type?: string; data?: string; library?: string }>;
-  }>;
-  results?: Array<unknown>;
-};
+export async function createConversation(): Promise<string> {
+  const res = await fetch(`${AGENT_BASE}/conversation/`, {
+    method: 'POST',
+    headers: apiHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to create conversation: ${res.status}`);
+  const data = await res.json();
+  return data.conversation_id as string;
+}
 
-export async function sendChatMessage(message: string, signal?: AbortSignal): Promise<Response> {
-  return fetch(AI_AGENT_URL, {
+export async function sendConversationMessage(
+  conversationId: string,
+  message: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  return fetch(`${AGENT_BASE}/conversation/${conversationId}/chat`, {
     method: 'POST',
     headers: apiHeaders(),
     body: JSON.stringify({ message }),
     signal,
+  });
+}
+
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await fetch(`${AGENT_BASE}/conversation/${conversationId}`, {
+    method: 'DELETE',
+    headers: apiHeaders(),
   });
 }

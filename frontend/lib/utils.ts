@@ -1,55 +1,47 @@
-import { API_BASE } from './constants';
-export { API_BASE, AI_AGENT_URL } from './constants';
+import { API_BASE } from "./constants";
 
-export function getTerminalWsUrl(): string {
-  const base = API_BASE.replace(/^http/, 'ws');
-  const uid = typeof window !== 'undefined' ? getUserId() : 'default_user';
-  return `${base}/terminal/pty?user_id=${encodeURIComponent(uid)}`;
-}
+/** User mặc định dùng cho mọi request (X-User-ID, terminal). */
+const DEFAULT_USER_ID = "user-001";
 
 export function getUserId(): string {
-  if (typeof window === 'undefined') return 'default_user';
-  let uid = localStorage.getItem('X_USER_ID');
-  if (!uid) {
-    uid = 'user_' + Date.now();
-    localStorage.setItem('X_USER_ID', uid);
-  }
-  return uid;
+  return DEFAULT_USER_ID;
 }
 
+/** Header cho API request (có kèm user ID). */
 export function apiHeaders(): Record<string, string> {
   return {
-    'X-User-ID': getUserId(),
-    'Content-Type': 'application/json',
+    "X-User-ID": getUserId(),
+    "Content-Type": "application/json",
   };
 }
 
-export function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/** URL WebSocket cho terminal (PTY), có gắn user_id. */
+export function getTerminalWsUrl(): string {
+  const baseWs = API_BASE.replace(/^http/, "ws");
+  return `${baseWs}/terminal/pty?user_id=${encodeURIComponent(getUserId())}`;
 }
 
-export function escapeHtmlAttr(s: string): string {
+const escapeByMap = (s: string, map: Record<string, string>): string =>
+  String(s).replace(/[&<>"']/g, (ch) => map[ch] ?? ch);
+
+export const escapeHtml = (s: string) =>
+  escapeByMap(s, {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+  });
+
+/** Bỏ mã ANSI (màu/format) trong chuỗi terminal. */
+export function stripAnsi(s = ""): string {
   return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+    .replace(/\[[0-9]{1,3}m/g, "");
 }
 
-export function stripAnsi(s: string | undefined): string {
-  if (!s) return '';
-  return String(s)
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-    .replace(/\[[0-9]{1,3}m/g, '');
-}
-
+/** Format số byte thành dạng đọc được (B, KB, MB). */
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -20,7 +20,6 @@ export function useFileTabs() {
   const closeTab = useCallback((path: string) => {
     setOpenTabs((prev) => {
       const cached = prev.find((t) => t.path === path);
-      // Caller should check fileCache and confirm before calling closeTab
       const next = prev.filter((t) => t.path !== path);
       setCurrentFilePath((cur) => (cur === path ? (next.length ? next[next.length - 1].path : null) : cur));
       return next;

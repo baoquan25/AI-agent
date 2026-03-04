@@ -34,7 +34,15 @@ async def pty_websocket(
             sandbox.process.create_pty_session,
             id=sid,
             cwd="/home/daytona/workspace",
-            envs={"TERM": "xterm-256color"},
+            envs={
+                "TERM": "xterm-256color",
+                # Use C.UTF-8 which is always available in any Linux container,
+                # avoiding "setlocale: cannot change locale (en_US.UTF-8)" warnings.
+                "LANG": "C.UTF-8",
+                "LC_ALL": "C.UTF-8",
+                "LC_CTYPE": "C.UTF-8",
+                "LC_COLLATE": "C.UTF-8",
+            },
             pty_size=PtySize(cols=220, rows=50),
         )
     except Exception as e:

@@ -1,14 +1,14 @@
 'use client';
 
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { Resizer } from '../components/layout/Resizer';
-import { FileTreeSidebar } from '../components/sidebar/FileTreeSidebar';
-import { ContextMenu } from '../components/sidebar/ContextMenu';
+import { FileTreeSidebar } from '../components/leftbar/FileTreeSidebar';
+import { ContextMenu } from '../components/leftbar/ContextMenu';
 import { EditorSection } from '../components/editor/EditorSection';
 import { OutputSection } from '../components/output/OutputSection';
-import { ChatSection } from '../components/agent/ChatSection';
+import { RightBar } from '../components/rightbar/RightBar';
 import { useFileTabs } from '../hooks/useFileTabs';
 import { useRunCode } from '../hooks/useRunCode';
 import { useFileContent } from '../hooks/useFileContent';
@@ -18,6 +18,8 @@ import { useChat } from '../hooks/useChat';
 import { useFileTree } from '../hooks/useFileTree';
 import { useResize } from '../hooks/useResize';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useFileWatch } from '../hooks/useFileWatch';
+import type { FileChangeEvent } from '../hooks/useFileWatch';
 
 export default function Home() {
   const loadFileTreeRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -51,7 +53,111 @@ export default function Home() {
     loadFileTreeRef.current = fileTree.loadFileTree;
   }, [fileTree.loadFileTree]);
 
+  // ── Real-time file watch (VS Code–style event-driven updates) ───────────
+  const currentFilePathRef = useRef(fileTabs.currentFilePath);
+  currentFilePathRef.current = fileTabs.currentFilePath;
+  const fileCacheRef = useRef(fileTabs.fileCache);
+  fileCacheRef.current = fileTabs.fileCache;
+
+  const handleFileChanges = useCallback((changes: FileChangeEvent[]) => {
+    for (const change of changes) {
+      const norm = (p: string) => (p || '').replace(/^\/+|\/+$/g, '');
+      const path = norm(change.path);
+      const parentPath = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
+
+      switch (change.changeType) {
+        case 'created': {
+          const name = path.split('/').pop() || path;
+          fileTree.insertNode(parentPath, { type: 'file', name, path });
+          fileTree.scheduleRefreshFolderList(parentPath);
+          break;
+        }
+        case 'deleted': {
+          fileTree.removeNode(path);
+          fileTree.scheduleRefreshFolderList(parentPath);
+          fileTabs.setFileCache((prev) => {
+            const next = { ...prev };
+            for (const key of Object.keys(next)) {
+              const k = norm(key);
+              if (k === path || k.startsWith(path + '/')) delete next[key];
+            }
+            return next;
+          });
+          fileTabs.setOpenTabs((prev) => {
+            const next = prev.filter((t) => {
+              const tp = norm(t.path);
+              return tp !== path && !tp.startsWith(path + '/');
+            });
+            if (next.length !== prev.length) {
+              fileTabs.setCurrentFilePath((cur) => {
+                const cp = cur ? norm(cur) : '';
+                if (cp === path || cp.startsWith(path + '/')) {
+                  return next.length ? next[next.length - 1].path : null;
+                }
+                return cur;
+              });
+            }
+            return next;
+          });
+          break;
+        }
+        case 'updated': {
+          // Skip re-reading files we just saved locally (avoids redundant GET).
+          if (fileContent.wasRecentlySaved(path)) break;
+          const isModified = fileCacheRef.current[path]?.modified;
+          if (!isModified) {
+            fileTabs.setFileCache((prev) => {
+              if (!prev[path]) return prev;
+              const next = { ...prev };
+              delete next[path];
+              return next;
+            });
+            if (currentFilePathRef.current && norm(currentFilePathRef.current) === path) {
+              fileContent.loadFileContent(path);
+            }
+          }
+          break;
+        }
+        case 'renamed': {
+          const oldPath = change.oldPath ? norm(change.oldPath) : '';
+          if (oldPath) {
+            fileTree.renameNodeInTree(oldPath, path);
+            const oldParent = oldPath.includes('/') ? oldPath.split('/').slice(0, -1).join('/') : '';
+            fileTree.scheduleRefreshFolderList(oldParent);
+            if (parentPath !== oldParent) fileTree.scheduleRefreshFolderList(parentPath);
+            fileTabs.setFileCache((prev) => {
+              const next = { ...prev };
+              if (next[oldPath]) {
+                next[path] = next[oldPath];
+                delete next[oldPath];
+              }
+              return next;
+            });
+            const newName = path.split('/').pop() || path;
+            fileTabs.setOpenTabs((prev) =>
+              prev.map((t) =>
+                norm(t.path) === oldPath ? { ...t, path, name: newName } : t
+              )
+            );
+            fileTabs.setCurrentFilePath((cur) =>
+              cur && norm(cur) === oldPath ? path : cur
+            );
+          }
+          break;
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useFileWatch(handleFileChanges);
+
   const resize = useResize();
+  const [showLeftBar, setShowLeftBar] = useState(true);
+  const [showAgentPanel, setShowAgentPanel] = useState(false);
+  const leftBarVisible = showLeftBar;
+  const rightBarVisible = chat.chatSessions.length > 0 || showAgentPanel;
+  const outputPanelVisible = resize.editorFlex < 100;
 
   const handleCloseTab = useCallback(
     (path: string) => {
@@ -96,12 +202,19 @@ export default function Home() {
 
   return (
     <>
-      <Header />
+      <Header
+        leftBarVisible={leftBarVisible}
+        onToggleLeftBar={() => setShowLeftBar((v) => !v)}
+        outputPanelVisible={outputPanelVisible}
+        onToggleOutputPanel={() => resize.setEditorFlex(resize.editorFlex >= 100 ? 65 : 100)}
+        agentPanelVisible={rightBarVisible}
+        onToggleAgentPanel={() => setShowAgentPanel((v) => !v)}
+      />
       <div className="container">
         <FileTreeSidebar
-          width={resize.fileTreeWidth}
-          sidebarTab={search.sidebarTab}
-          setSidebarTab={search.setSidebarTab}
+          width={leftBarVisible ? resize.fileTreeWidth : 0}
+          leftBarTab={search.leftBarTab}
+          setLeftBarTab={search.setLeftBarTab}
           openSearchTab={search.openSearchTab}
           searchPattern={search.searchPattern}
           setSearchPattern={search.setSearchPattern}
@@ -142,7 +255,9 @@ export default function Home() {
           loadFileContent={fileContent.loadFileContent}
         />
 
-        <Resizer kind="file" resizing={resize.resizing} onMouseDown={resize.startResizeFile} />
+        {leftBarVisible && (
+          <Resizer kind="file" resizing={resize.resizing} onMouseDown={resize.startResizeFile} />
+        )}
 
         <div className="main-content" ref={resize.mainContentRef}>
           <EditorSection
@@ -172,10 +287,17 @@ export default function Home() {
           />
         </div>
 
-        <Resizer kind="chat" resizing={resize.resizing} onMouseDown={resize.startResizeChat} />
+        {rightBarVisible && (
+          <Resizer kind="chat" resizing={resize.resizing} onMouseDown={resize.startResizeRight} />
+        )}
 
-        <ChatSection
-          width={resize.chatSectionWidth}
+        <RightBar
+          width={rightBarVisible ? resize.rightBarWidth : 0}
+          sessions={chat.chatSessions}
+          activeSessionId={chat.activeSessionId}
+          onSwitchSession={chat.switchChatSession}
+          onCloseSession={chat.closeChatSession}
+          onAddSession={chat.addChatSession}
           messages={chat.chatMessages}
           loading={chat.chatLoading}
           chatMessagesContainerRef={chat.chatMessagesContainerRef}

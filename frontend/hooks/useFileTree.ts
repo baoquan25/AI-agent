@@ -5,7 +5,7 @@ import type { TreeNode } from '../lib/types';
 import * as fsApi from '../lib/api/fs';
 import type { ListFileItem } from '../lib/api/fs';
 
-const REFRESH_DEBOUNCE_MS = 250;
+const _REFRESH_DEBOUNCE_MS = 250; // kept for fallback, WebSocket events are preferred
 
 function getNodePath(node: TreeNode, parentPath: string): string {
   return node.path ?? (parentPath ? `${parentPath}/${node.name}` : node.name);
@@ -140,10 +140,13 @@ export function useFileTree(
       timers.delete(folderPath);
       const files = await fsApi.loadList(folderPath);
       if (files) setFileTreeData((prev) => mergeListIntoTree(prev, folderPath, files));
-    }, REFRESH_DEBOUNCE_MS));
+    }, _REFRESH_DEBOUNCE_MS));
   }, []);
 
+  const initialLoadDoneRef = useRef(false);
   useEffect(() => {
+    if (initialLoadDoneRef.current) return;
+    initialLoadDoneRef.current = true;
     loadFileTree();
   }, [loadFileTree]);
 
@@ -207,8 +210,8 @@ export function useFileTree(
       try {
         const data = await fsApi.createFile(path, '');
         if (data.success) {
-          scheduleRefreshFolderList(parentPath);
           addTab(path, name);
+          scheduleRefreshFolderList(parentPath);
           setOutputHtml(`<span class="output-success">Created: ${path}</span>`);
         } else {
           setFileTreeData((prev) => removeNodeFromTree(prev, path));
@@ -471,7 +474,6 @@ export function useFileTree(
             const createRes = await fsApi.createFile(newPath, content);
             if (createRes.success) {
               setFileTreeData((prev) => insertNodeIntoTree(prev, parentPath, { type: 'file', name: newName, path: newPath }));
-              scheduleRefreshFolderList(parentPath);
               addTab(newPath, newName);
               setOutputHtml(`<span class="output-success">Pasted: ${newPath}</span>`);
               if (parentPath) setExpandedFolders((prev) => new Set(prev).add(parentPath));
@@ -496,7 +498,6 @@ export function useFileTree(
               return;
             }
             setFileTreeData((prev) => insertNodeIntoTree(prev, parentPath, { type: 'directory', name: newName, path: newPath, children: [] }));
-            scheduleRefreshFolderList(parentPath);
             setOutputHtml(`<span class="output-success">Pasted folder: ${newPath}</span>`);
             if (parentPath) setExpandedFolders((prev) => new Set(prev).add(parentPath));
           } catch {
@@ -527,6 +528,23 @@ export function useFileTree(
       }
     },
     [contextMenu.node, contextMenu.show, copiedFilePath, copiedNodeType, fileTreeData, copyDirectoryRecursive, deleteNodeOnServer, scheduleRefreshFolderList, addTab, setOutputHtml, setExpandedFolders]
+  );
+
+  const insertNode = useCallback(
+    (parentPath: string, node: TreeNode) =>
+      setFileTreeData((prev) => insertNodeIntoTree(prev, parentPath, node)),
+    []
+  );
+
+  const removeNode = useCallback(
+    (path: string) => setFileTreeData((prev) => removeNodeFromTree(prev, path)),
+    []
+  );
+
+  const renameNode_ = useCallback(
+    (oldPath: string, newPath: string) =>
+      setFileTreeData((prev) => renameNodeInTree(prev, oldPath, newPath)),
+    []
   );
 
   return {
@@ -568,5 +586,9 @@ export function useFileTree(
     treeCreateInputRef,
     renameInputRef,
     initialExpandDoneRef,
+    scheduleRefreshFolderList,
+    insertNode,
+    removeNode,
+    renameNodeInTree: renameNode_,
   };
 }

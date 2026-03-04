@@ -4,7 +4,14 @@ import { useState, useCallback } from 'react';
 import { API_BASE } from '../lib/constants';
 import { apiHeaders } from '../lib/utils';
 import { escapeHtml, stripAnsi } from '../lib/utils';
-import type { RunResponse } from '../lib/api/run';
+type RunResponse = {
+  success?: boolean;
+  output?: string;
+  stdout?: string;
+  detail?: string;
+  outputs?: Array<{ type?: string; data?: string; library?: string; lib?: string }>;
+  rich_output?: Array<{ type?: string; data?: string; library?: string; lib?: string }>;
+};
 
 export function useRunCode() {
   const [runBusy, setRunBusy] = useState(false);

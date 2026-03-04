@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 type FileCache = Record<string, { content: string; modified: boolean }>;
 
@@ -16,48 +16,39 @@ export function useKeyboardShortcuts(options: {
   fileCache: FileCache;
   chatLoading: boolean;
 }) {
-  const {
-    saveAllFiles,
-    openSearchTab,
-    closeTab,
-    currentFilePath,
-    treeCreateMode,
-    cancelCreate,
-    setContextMenu,
-    setRenameNode,
-    fileCache,
-    chatLoading,
-  } = options;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const o = optionsRef.current;
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
-        if (!chatLoading) saveAllFiles();
+        if (!o.chatLoading) o.saveAllFiles();
       }
       if (e.ctrlKey && e.key === 'p') {
         e.preventDefault();
-        if (!chatLoading) openSearchTab();
+        if (!o.chatLoading) o.openSearchTab();
       }
-      if (e.ctrlKey && e.key === 'w' && currentFilePath) {
+      if (e.ctrlKey && e.key === 'w' && o.currentFilePath) {
         e.preventDefault();
-        closeTab(currentFilePath);
+        o.closeTab(o.currentFilePath);
       }
       if (e.key === 'Escape') {
-        if (treeCreateMode) cancelCreate();
-        setContextMenu((prev: { show: boolean }) => ({ ...prev, show: false }));
-        setRenameNode(null);
+        if (o.treeCreateMode) o.cancelCreate();
+        o.setContextMenu((prev: { show: boolean }) => ({ ...prev, show: false }));
+        o.setRenameNode(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [saveAllFiles, openSearchTab, closeTab, currentFilePath, treeCreateMode, cancelCreate, setContextMenu, setRenameNode, chatLoading]);
+  }, []);
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (Object.values(fileCache).some((v) => v.modified)) e.preventDefault();
+      if (Object.values(optionsRef.current.fileCache).some((v) => v.modified)) e.preventDefault();
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [fileCache]);
+  }, []);
 }

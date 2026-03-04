@@ -4,13 +4,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { searchFiles as searchFilesApi } from '../lib/api/fs';
 
 export function useSearch() {
-  const [sidebarTab, setSidebarTab] = useState<'files' | 'search'>('files');
+  const [leftBarTab, setLeftBarTab] = useState<'files' | 'search'>('files');
   const [searchPattern, setSearchPattern] = useState('');
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const searchPatternRef = useRef(searchPattern);
+  searchPatternRef.current = searchPattern;
+
   const searchFiles = useCallback(async (patternOverride?: string) => {
-    const pattern = (patternOverride ?? searchPattern).trim();
+    const pattern = (patternOverride ?? searchPatternRef.current).trim();
     if (!pattern) {
       setSearchResults([]);
       return;
@@ -21,27 +24,27 @@ export function useSearch() {
     } catch (e) {
       setSearchResults([`Error: ${(e as Error).message}`]);
     }
-  }, [searchPattern]);
+  }, []);
 
   const openSearchTab = useCallback(() => {
-    setSidebarTab('search');
+    setLeftBarTab('search');
     setSearchResults([]);
     setTimeout(() => searchInputRef.current?.focus(), 50);
   }, []);
 
   useEffect(() => {
-    if (sidebarTab !== 'search') return;
+    if (leftBarTab !== 'search') return;
     if (!searchPattern.trim()) {
       setSearchResults([]);
       return;
     }
     const t = setTimeout(() => searchFiles(), 300);
     return () => clearTimeout(t);
-  }, [sidebarTab, searchPattern, searchFiles]);
+  }, [leftBarTab, searchPattern, searchFiles]);
 
   return {
-    sidebarTab,
-    setSidebarTab,
+    leftBarTab,
+    setLeftBarTab,
     searchPattern,
     setSearchPattern,
     searchResults,

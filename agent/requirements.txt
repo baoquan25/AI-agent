@@ -1,7 +1,7 @@
 langchain
 langchain_openai
+langgraph
 python-dotenv
 daytona
 uvicorn
 fastapi
-daytona

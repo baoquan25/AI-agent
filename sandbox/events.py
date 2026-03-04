@@ -3,7 +3,7 @@
 
 """
 Application lifespan — initialise Daytona client, WorkspaceManager, FilesystemService,
-and the workspace file watcher.
+and the EventBroadcaster (WS /fs/watch, API-driven, no disk watcher).
 """
 
 import asyncio
@@ -17,10 +17,9 @@ from config import DAYTONA_API_KEY, DAYTONA_API_URL
 from workspace_manager import WorkspaceManager
 from services.filesystem_service import FilesystemService
 from services.file_watcher import WorkspaceCacheWatcher
+from services.event_broadcaster import broadcaster
 
 logger = logging.getLogger("sandbox-api")
-
-_WORKSPACE_PATH = "/home/daytona/workspace"
 
 
 @asynccontextmanager
@@ -35,16 +34,17 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to connect to Daytona: {e}")
         daytona_client = None
 
-    workspace_manager = WorkspaceManager(base_path=_WORKSPACE_PATH)
+    workspace_manager = WorkspaceManager()
     filesystem_service = FilesystemService(workspace_manager)
 
     app.state.daytona = daytona_client
     app.state.workspace_manager = workspace_manager
     app.state.filesystem_service = filesystem_service
+    app.state.event_broadcaster = broadcaster
 
-    # Import the global cache from the router so the watcher can invalidate it.
     from routers.file_system import _file_cache
-    watcher = WorkspaceCacheWatcher(_file_cache, _WORKSPACE_PATH)
+
+    watcher = WorkspaceCacheWatcher(_file_cache, broadcaster=broadcaster)
     watcher.start(asyncio.get_event_loop())
     app.state.file_watcher = watcher
 

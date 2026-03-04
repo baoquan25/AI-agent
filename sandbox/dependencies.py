@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from fastapi import HTTPException, Request, Header
 from daytona import CreateSandboxFromSnapshotParams
@@ -12,6 +13,14 @@ _LABEL_KEY = "app-user-id"
 
 _STARTING_STATES = None
 _USABLE_STATES = None
+
+# ── Sandbox cache ────────────────────────────────────────────────────
+# Cache sandbox objects per user_id to avoid calling find_one on every
+# single HTTP request.  Each entry expires after _SANDBOX_CACHE_TTL seconds.
+
+_SANDBOX_CACHE_TTL = 300  # 5 minutes
+_sandbox_cache: dict[str, tuple[object, float]] = {}
+_sandbox_cache_lock = asyncio.Lock()
 
 
 def _get_sandbox_states():
@@ -75,7 +84,27 @@ async def resolve_sandbox(app_state, user_id: str):
     if not daytona_client:
         raise RuntimeError("Daytona not initialized")
 
+    # ── Check cache first ─────────────────────────────────────────────
+    # Do NOT call wm.initialize here — filesystem_service methods already
+    # call it internally, and it has its own TTL cache.  Calling it here
+    # adds a redundant SDK round-trip on every request.
+    now = time.monotonic()
+    async with _sandbox_cache_lock:
+        cached = _sandbox_cache.get(user_id)
+        if cached:
+            sandbox, ts = cached
+            if now - ts < _SANDBOX_CACHE_TTL:
+                _, usable = _get_sandbox_states()
+                state = getattr(sandbox, "state", None)
+                if state in usable:
+                    return sandbox, sandbox.id
+                else:
+                    _sandbox_cache.pop(user_id, None)
+
+    # ── Cache miss — resolve via SDK ──────────────────────────────────
+    t0 = time.monotonic()
     sandbox = await asyncio.to_thread(_find_existing_sandbox, daytona_client, user_id)
+    t1 = time.monotonic()
     if not sandbox:
         try:
             sandbox = await asyncio.to_thread(_create_sandbox, daytona_client, user_id)
@@ -84,11 +113,32 @@ async def resolve_sandbox(app_state, user_id: str):
             sandbox = await asyncio.to_thread(_find_existing_sandbox, daytona_client, user_id)
             if not sandbox:
                 raise RuntimeError(f"Failed to get or create sandbox: {e}") from e
+    t2 = time.monotonic()
+    logger.info(
+        "resolve_sandbox MISS user=%s find=%.0fms create=%.0fms",
+        user_id, (t1-t0)*1000, (t2-t1)*1000,
+    )
 
     wm = getattr(app_state, "workspace_manager", None)
     if wm:
         await wm.initialize(sandbox)
+
+    # ── Store in cache ────────────────────────────────────────────────
+    async with _sandbox_cache_lock:
+        _sandbox_cache[user_id] = (sandbox, time.monotonic())
+        # Prune if cache grows too large
+        if len(_sandbox_cache) > 10_000:
+            cutoff = time.monotonic() - _SANDBOX_CACHE_TTL
+            expired = [k for k, (_, ts) in _sandbox_cache.items() if ts < cutoff]
+            for k in expired:
+                _sandbox_cache.pop(k, None)
+
     return sandbox, sandbox.id
+
+
+def invalidate_sandbox_cache(user_id: str) -> None:
+    """Remove a user's sandbox from the cache (e.g. after stop/delete)."""
+    _sandbox_cache.pop(user_id, None)
 
 
 def get_daytona(request: Request):
@@ -109,7 +159,8 @@ async def get_sandbox(
     request: Request,
     user_id: str = Header(default="default_user", alias="X-User-ID"),
 ):
-    """HTTP dependency: resolve sandbox per request (stateless)."""
+    """HTTP dependency: resolve sandbox per request.
+    Uses in-memory cache to avoid calling find_one on every request."""
     try:
         return await resolve_sandbox(request.app.state, user_id)
     except RuntimeError as e:

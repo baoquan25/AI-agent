@@ -1,11 +1,17 @@
 # pyright: basic
 # type: ignore
 
+import logging
 import sys
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
 sys.path.insert(0, str(_here))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s %(name)s | %(message)s",
+)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +23,7 @@ from routers.run import router as run_router
 from routers.file_system import router as fs_router
 from routers.terminal import router as terminal_router
 
-app = FastAPI(title="Daytona Sandbox API", lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

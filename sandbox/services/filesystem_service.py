@@ -1,8 +1,11 @@
 # filesystem_service.py
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import posixpath
+import time
 from typing import Any, Optional
 
 from workspace_manager import WorkspaceManager
@@ -74,7 +77,10 @@ def _decode_text(raw: bytes) -> tuple[str, str]:
 class FilesystemService:
     def __init__(self, workspace_manager: WorkspaceManager):
         self.wm = workspace_manager
+        # Fix 5.2: protect _created_dirs with an asyncio lock so concurrent
+        # requests for the same sandbox don't race on the per-sandbox set.
         self._created_dirs: dict[str, set[str]] = {}
+        self._dirs_lock = asyncio.Lock()
 
     async def initialize(self, sandbox) -> bool:
         return await self.wm.initialize(sandbox)
@@ -88,9 +94,16 @@ class FilesystemService:
     async def list_files(self, path: str, sandbox) -> list[dict[str, Any]]:
         """List files/dirs via sandbox.fs.list_files (doc: List files and directories)."""
         try:
+            t0 = time.monotonic()
             await self.wm.initialize(sandbox)
+            t1 = time.monotonic()
             sdk_path = _workspace_path(path)
             files = await asyncio.to_thread(sandbox.fs.list_files, sdk_path)
+            t2 = time.monotonic()
+            logger.info(
+                "list_files(%s) init=%.0fms sdk=%.0fms total=%.0fms",
+                path, (t1-t0)*1000, (t2-t1)*1000, (t2-t0)*1000,
+            )
             return [
                 {
                     "name": f.name,
@@ -107,7 +120,7 @@ class FilesystemService:
             return []
 
     async def get_tree(self, path: str, sandbox, max_depth: int = 4) -> dict[str, Any]:
-        """Build tree; runs blocking SDK calls in a thread to avoid blocking the event loop."""
+        """Build tree using list_files only — avoids redundant get_file_info per node."""
         await self.wm.initialize(sandbox)
         sdk_path = _workspace_path(path)
         rel_base = path or ""
@@ -116,28 +129,39 @@ class FilesystemService:
             if depth > max_depth:
                 return None
             try:
-                info = sandbox.fs.get_file_info(sdk_dir)
+                children_raw = sorted(
+                    sandbox.fs.list_files(sdk_dir),
+                    key=lambda x: (not x.is_dir, x.name),
+                )
                 node = {
-                    "name": info.name,
+                    "name": sdk_dir.rsplit("/", 1)[-1],
                     "path": rel_path,
-                    "type": "directory" if info.is_dir else "file",
-                    "size": getattr(info, "size", 0),
-                    "modified": getattr(info, "mod_time", ""),
+                    "type": "directory",
+                    "children": [],
                 }
-                if info.is_dir:
-                    node["children"] = []
-                    for f in sorted(sandbox.fs.list_files(sdk_dir), key=lambda x: (not x.is_dir, x.name)):
+                for f in children_raw:
+                    child_rel = f"{rel_path}/{f.name}".lstrip("/") if rel_path else f.name
+                    if f.is_dir:
                         child_sdk = f"{sdk_dir}/{f.name}"
-                        child_rel = f"{rel_path}/{f.name}".lstrip("/") if rel_path else f.name
                         child = build_tree(child_sdk, child_rel, depth + 1)
                         if child:
                             node["children"].append(child)
+                    else:
+                        node["children"].append({
+                            "name": f.name,
+                            "path": child_rel,
+                            "type": "file",
+                            "size": getattr(f, "size", 0),
+                            "modified": getattr(f, "mod_time", ""),
+                        })
                 return node
             except Exception as e:
                 return {"name": sdk_dir.split("/")[-1], "error": str(e)}
 
         def _run():
+            t0 = time.monotonic()
             tree = build_tree(sdk_path, rel_base, 0)
+            logger.info("get_tree(%s) total=%.0fms", path, (time.monotonic()-t0)*1000)
             if tree:
                 tree["base_path"] = path or "/"
             return tree or {"error": "Failed to build tree"}
@@ -152,8 +176,15 @@ class FilesystemService:
         try:
             if not path or not path.strip("/"):
                 return {"success": False, "error": "read_file: path must not be empty"}
+            t0 = time.monotonic()
             await self.wm.initialize(sandbox)
+            t1 = time.monotonic()
             raw = await asyncio.to_thread(sandbox.fs.download_file, _workspace_path(path))
+            t2 = time.monotonic()
+            logger.info(
+                "read_file(%s) init=%.0fms sdk=%.0fms total=%.0fms",
+                path, (t1-t0)*1000, (t2-t1)*1000, (t2-t0)*1000,
+            )
 
             # Avoid decoding binary or non-UTF-8 as UTF-8 (crashes / mojibake).
             is_binary = _is_binary_blob(raw)
@@ -175,28 +206,38 @@ class FilesystemService:
             logger.error(f"read_file failed at {path}: {e}")
             return {"success": False, "error": str(e)}
 
-    def _reset_dir_cache(self, sandbox) -> None:
+    async def _reset_dir_cache(self, sandbox) -> None:
         sid = getattr(sandbox, "id", None)
         if sid:
-            self._created_dirs.pop(sid, None)
+            async with self._dirs_lock:
+                self._created_dirs.pop(sid, None)
 
-    def _dirs_for(self, sandbox) -> set[str]:
+    async def _dirs_for(self, sandbox) -> set[str]:
         sid = getattr(sandbox, "id", None)
         if not sid:
             return set()
-        if sid not in self._created_dirs:
-            self._created_dirs[sid] = set()
-        return self._created_dirs[sid]
+        async with self._dirs_lock:
+            if sid not in self._created_dirs:
+                self._created_dirs[sid] = set()
+            return self._created_dirs[sid]
 
     async def _create_dir_if_needed(self, dir_path: str, sandbox) -> None:
-        dirs = self._dirs_for(sandbox)
-        if dir_path in dirs:
-            return
+        async with self._dirs_lock:
+            sid = getattr(sandbox, "id", None)
+            if sid:
+                dirs = self._created_dirs.setdefault(sid, set())
+                if dir_path in dirs:
+                    return
+        t0 = time.monotonic()
         try:
             await asyncio.to_thread(sandbox.fs.create_folder, _workspace_path(dir_path), "755")
         except Exception:
             pass  # already exists → treat as success
-        dirs.add(dir_path)
+        logger.info("_create_dir(%s) sdk=%.0fms", dir_path, (time.monotonic()-t0)*1000)
+        async with self._dirs_lock:
+            sid = getattr(sandbox, "id", None)
+            if sid:
+                self._created_dirs.setdefault(sid, set()).add(dir_path)
 
     async def _ensure_workspace_and_parents(self, path: str, sandbox) -> bool:
         if not await self.wm.initialize(sandbox):
@@ -205,8 +246,22 @@ class FilesystemService:
         dir_parts = parts[:-1]
         if not dir_parts:
             return True
-        # Create parents in order so that "a" exists before "a/b" (SDK may require it).
-        for i in range(1, len(dir_parts) + 1):
+
+        # Find the deepest parent that's already cached (known to exist).
+        # Only create directories from that point downward, skipping SDK calls
+        # for levels we already know exist.
+        sid = getattr(sandbox, "id", None)
+        start_from = 0
+        if sid:
+            async with self._dirs_lock:
+                known = self._created_dirs.get(sid, set())
+                for i in range(len(dir_parts), 0, -1):
+                    candidate = "/".join(dir_parts[:i])
+                    if candidate in known:
+                        start_from = i
+                        break
+
+        for i in range(start_from + 1, len(dir_parts) + 1):
             dir_path = "/".join(dir_parts[:i])
             await self._create_dir_if_needed(dir_path, sandbox)
         return True
@@ -216,18 +271,25 @@ class FilesystemService:
             if not path or not path.strip("/"):
                 logger.error("write_file: path must not be empty (cannot write to workspace root directory)")
                 return False
+            t0 = time.monotonic()
             if not await self._ensure_workspace_and_parents(path, sandbox):
                 return False
+            t1 = time.monotonic()
             sdk_path = _workspace_path(path)
             data = content.encode("utf-8")
             try:
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             except Exception:
                 self.wm.invalidate(sandbox)
-                self._reset_dir_cache(sandbox)
+                await self._reset_dir_cache(sandbox)
                 if not await self._ensure_workspace_and_parents(path, sandbox):
                     return False
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
+            t2 = time.monotonic()
+            logger.info(
+                "write_file(%s) parents=%.0fms upload=%.0fms total=%.0fms",
+                path, (t1-t0)*1000, (t2-t1)*1000, (t2-t0)*1000,
+            )
             return True
         except Exception as e:
             logger.error(f"write_file failed at {path}: {e}")
@@ -251,7 +313,7 @@ class FilesystemService:
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             except Exception:
                 self.wm.invalidate(sandbox)
-                self._reset_dir_cache(sandbox)
+                await self._reset_dir_cache(sandbox)
                 if not await self._ensure_workspace_and_parents(path, sandbox):
                     return False
                 await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
@@ -281,7 +343,7 @@ class FilesystemService:
                 return False
             await asyncio.to_thread(sandbox.fs.delete_file, sdk_path, recursive=True)
             self.wm.invalidate(sandbox)
-            self._reset_dir_cache(sandbox)
+            await self._reset_dir_cache(sandbox)
             return True
         except Exception as e:
             logger.error(f"delete_path failed at {path}: {e}")
@@ -331,7 +393,7 @@ class FilesystemService:
                 return False
             await asyncio.to_thread(sandbox.fs.move_files, sdk_src, sdk_dest)
             self.wm.invalidate(sandbox)
-            self._reset_dir_cache(sandbox)
+            await self._reset_dir_cache(sandbox)
             return True
         except Exception as e:
             logger.error(f"move_files failed: {e}")
@@ -339,7 +401,9 @@ class FilesystemService:
 
     async def get_file_info(self, path: str, sandbox) -> dict[str, Any]:
         try:
+            t0 = time.monotonic()
             info = await asyncio.to_thread(sandbox.fs.get_file_info, _workspace_path(path))
+            logger.info("get_file_info(%s) sdk=%.0fms", path, (time.monotonic()-t0)*1000)
             return {
                 "name": info.name,
                 "path": path,

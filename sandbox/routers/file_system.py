@@ -1,11 +1,23 @@
 # file_system.py
 
+import asyncio
 import os
 import time
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Response
+from services.file_watcher import emit_change as _emit_change
+
+
+def _emit(path: str, change: str) -> None:
+    """Fire-and-forget helper: emit file change event to broadcaster."""
+    try:
+        loop = asyncio.get_event_loop()
+        _emit_change(path, change, loop)
+    except Exception:
+        pass
+
+from fastapi import APIRouter, HTTPException, Header, Depends, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from config import FILE_CACHE_MAX_SIZE, FILE_CACHE_TTL_SECONDS
@@ -73,6 +85,64 @@ async def _invalidate_parent_cache(user_id: str, path: str) -> None:
 router = APIRouter(prefix="/fs", tags=["FileSystem"])
 
 
+@router.websocket("/watch")
+async def watch_file_changes(websocket: WebSocket):
+    """WebSocket endpoint for real-time file change events.
+
+    VS Code equivalent: WS /fs/watch — server pushes fileChange events so
+    the client never needs to poll /fs/tree or /fs/list.
+
+    Message format sent to client:
+        {
+            "type": "fileChange",
+            "changes": [{"path": "src/foo.py", "change": "updated|added|deleted"}, ...],
+            "timestamp": 1234567890.123
+        }
+
+    Client may also receive:
+        {"type": "ping"}   — keep-alive every 30 s
+        {"type": "error", "message": "..."}  — broadcaster unavailable
+    """
+    from services.event_broadcaster import broadcaster
+
+    await websocket.accept()
+    queue = broadcaster.subscribe()
+    logger.info("WS /fs/watch: client connected")
+    try:
+        # Send a ready message so client knows the channel is live.
+        await websocket.send_json({"type": "ready"})
+
+        async def _send_loop():
+            while True:
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30)
+                    await websocket.send_json(payload)
+                except asyncio.TimeoutError:
+                    # VS Code ping: keep-alive every 30 s.
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+
+        async def _recv_loop():
+            """Drain incoming messages (client may send pong / close)."""
+            try:
+                while True:
+                    msg = await websocket.receive()
+                    if msg.get("type") == "websocket.disconnect":
+                        break
+            except (WebSocketDisconnect, Exception):
+                pass
+
+        await asyncio.gather(_send_loop(), _recv_loop())
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        pass
+    except Exception as e:
+        logger.error("WS /fs/watch error: %s", e)
+    finally:
+        broadcaster.unsubscribe(queue)
+        logger.info("WS /fs/watch: client disconnected")
+
+
 @router.get("/tree")
 async def get_file_tree(
     path: str = "",
@@ -86,7 +156,10 @@ async def get_file_tree(
     depth = min(max_depth, MAX_TREE_DEPTH)
     try:
         tree = await fs.get_tree(safe_path, sandbox, depth)
-        return {"success": True, "sandbox_id": sid, "user_id": user_id, "tree": tree}
+        return JSONResponse(
+            content={"success": True, "sandbox_id": sid, "user_id": user_id, "tree": tree},
+            headers={"X-Use-File-Watch-For-Updates": "ws:/fs/watch"},
+        )
     except Exception as e:
         logger.error(f"Failed to get file tree: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -103,10 +176,13 @@ async def list_files(
     safe_path = _validate_user_path(user_id, path) if path else ""
     try:
         files = await fs.list_files(safe_path, sandbox)
-        return {
-            "success": True, "sandbox_id": sid, "user_id": user_id,
-            "path": safe_path, "files": files, "count": len(files),
-        }
+        return JSONResponse(
+            content={
+                "success": True, "sandbox_id": sid, "user_id": user_id,
+                "path": safe_path, "files": files, "count": len(files),
+            },
+            headers={"X-Use-File-Watch-For-Updates": "ws:/fs/watch"},
+        )
     except Exception as e:
         logger.error(f"Failed to list files: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -126,6 +202,21 @@ async def read_file_content(
     normalized_etag = normalize_etag(if_none_match)
 
     try:
+        # ── Fast path: if client sent ETag and server cache confirms it,
+        # skip the SDK get_file_info call entirely (saves ~200ms).
+        cached = await _file_cache.get(cache_key)
+        if normalized_etag and cached and cached.etag == normalized_etag:
+            ttl_remaining = _file_cache.ttl_seconds - (time.time() - cached.timestamp)
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": f'"{cached.etag}"',
+                    "X-Cache": "HIT",
+                    "X-Cache-TTL": str(clamp_ttl(ttl_remaining)),
+                },
+            )
+
+        # ── Need fresh metadata from sandbox ──────────────────────────
         file_info = await fs.get_file_info(safe_path, sandbox)
         if "error" in file_info:
             raise HTTPException(status_code=404, detail=file_info.get("error", "File not found"))
@@ -134,26 +225,15 @@ async def read_file_content(
         current_size = int(file_info.get("size", 0))
         current_etag = generate_etag_from_metadata(current_modified, current_size)
 
-        cached = await _file_cache.get(cache_key)
-
+        # Client ETag matches filesystem — no need to download content.
         if normalized_etag and normalized_etag == current_etag:
-            # HIT        → server cache is warm and still valid.
-            # REVALIDATED → client ETag matched the filesystem but our server cache
-            #               was absent or expired; file was re-confirmed via filesystem,
-            #               not served from in-process cache.
-            if cached:
-                x_cache = "HIT"
-                ttl_remaining = _file_cache.ttl_seconds - (time.time() - cached.timestamp)
-            else:
-                x_cache = "REVALIDATED"
-                ttl_remaining = _file_cache.ttl_seconds
             await _file_cache.set(cache_key, etag=current_etag, modified=current_modified)
             return Response(
                 status_code=304,
                 headers={
                     "ETag": f'"{current_etag}"',
-                    "X-Cache": x_cache,
-                    "X-Cache-TTL": str(clamp_ttl(ttl_remaining)),
+                    "X-Cache": "REVALIDATED",
+                    "X-Cache-TTL": str(clamp_ttl(_file_cache.ttl_seconds)),
                 },
             )
 
@@ -237,6 +317,7 @@ async def write_file_content(
         # extra round-trip (get_file_info after write).
         await _invalidate_cache(user_id, safe_path)
         await _invalidate_parent_cache(user_id, safe_path)
+        _emit(safe_path, "updated")
 
         new_size = len(request.content.encode("utf-8"))
         return JSONResponse(
@@ -271,6 +352,7 @@ async def create_folder(
 
         await _invalidate_cache(user_id, safe_path)
         await _invalidate_parent_cache(user_id, safe_path)
+        _emit(safe_path, "added")
 
         return {
             "success": True, "sandbox_id": sid, "user_id": user_id,
@@ -330,6 +412,7 @@ async def create_file(
 
         await _invalidate_cache(user_id, safe_path)
         await _invalidate_parent_cache(user_id, safe_path)
+        _emit(safe_path, "added")
 
         new_size = len((request.content or "").encode("utf-8"))
         return JSONResponse(
@@ -365,6 +448,7 @@ async def delete_path(
         # invalidate_prefix covers the exact key AND all children (for directories).
         await _file_cache.invalidate_prefix(get_cache_key(user_id, safe_path))
         await _invalidate_parent_cache(user_id, safe_path)
+        _emit(safe_path, "deleted")
 
         return {
             "success": True, "sandbox_id": sid, "user_id": user_id,
@@ -399,6 +483,8 @@ async def rename_path(
         # Invalidate destination (exact key + pre-existing children that are now stale).
         await _file_cache.invalidate_prefix(get_cache_key(user_id, safe_dest))
         await _invalidate_parent_cache(user_id, safe_dest)
+        _emit(safe_source, "deleted")
+        _emit(safe_dest, "added")
 
         return {
             "success": True, "sandbox_id": sid, "user_id": user_id,

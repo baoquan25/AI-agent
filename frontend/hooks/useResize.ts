@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 
 export function useResize() {
   const [fileTreeWidth, setFileTreeWidth] = useState(270);
-  const [chatSectionWidth, setChatSectionWidth] = useState(350);
+  const [rightBarWidth, setRightBarWidth] = useState(350);
   const [editorFlex, setEditorFlex] = useState(65);
   const [resizing, setResizing] = useState<'file' | 'chat' | 'editor' | null>(null);
   const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
@@ -18,9 +18,9 @@ export function useResize() {
     setResizing('file');
   }
 
-  function startResizeChat(e: React.MouseEvent) {
+  function startResizeRight(e: React.MouseEvent) {
     e.preventDefault();
-    resizeStartRef.current = { x: e.clientX, y: 0, width: chatSectionWidth, height: 0 };
+    resizeStartRef.current = { x: e.clientX, y: 0, width: rightBarWidth, height: 0 };
     setResizing('chat');
   }
 
@@ -38,7 +38,7 @@ export function useResize() {
       if (resizing === 'file') {
         setFileTreeWidth(Math.max(80, Math.min(500, resizeStartRef.current.width + (e.clientX - resizeStartRef.current.x))));
       } else if (resizing === 'chat') {
-        setChatSectionWidth(Math.max(200, resizeStartRef.current.width - (e.clientX - resizeStartRef.current.x)));
+        setRightBarWidth(Math.max(200, resizeStartRef.current.width - (e.clientX - resizeStartRef.current.x)));
       } else if (resizing === 'editor') {
         const totalH = resizeStartRef.current.height;
         if (totalH <= 0) return;
@@ -63,13 +63,13 @@ export function useResize() {
 
   return {
     fileTreeWidth,
-    chatSectionWidth,
+    rightBarWidth,
     editorFlex,
     setEditorFlex,
     resizing,
     mainContentRef,
     startResizeFile,
-    startResizeChat,
+    startResizeRight,
     startResizeEditor,
   };
 }
