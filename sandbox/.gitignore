@@ -1,0 +1,38 @@
+# Dependencies & virtual env
+.venv/
+venv/
+env/
+*.egg-info/
+*.egg
+
+# Bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local env (secrets, API URLs)
+.env
+.env.local
+.env.*.local
+
+# Local workspace data (avoid syncing user files)
+workspace/
+
+# Logs & temp
+*.log
+*.tmp
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
