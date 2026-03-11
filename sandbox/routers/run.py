@@ -1,7 +1,8 @@
 import asyncio
 import logging
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from dependencies import get_sandbox, get_workspace_manager
 from models.execution import RunCodeRequest, RunCodeResponse, OutputItem
@@ -23,12 +24,24 @@ async def run_code(
     sandbox, sandbox_id = sandbox_and_id
 
     code_to_run = req.code
+    file_extension = ""
     if req.file_path:
-        code_to_run = wm.wrap_code(req.code, req.file_path)
+        file_extension = Path(req.file_path).suffix.lower()
+        if not file_extension:
+            raise HTTPException(
+                status_code=400,
+                detail="Code language not supported or defined.",
+            )
+        if file_extension == ".py":
+            code_to_run = wm.wrap_code(req.code, req.file_path)
 
     result = await asyncio.to_thread(
         _execution_service.run_code,
-        sandbox, code_to_run, use_jupyter=req.use_jupyter, timeout=req.timeout,
+        sandbox,
+        code_to_run,
+        use_jupyter=req.use_jupyter,
+        timeout=req.timeout,
+        file_path=req.file_path,
     )
 
     outputs = [

@@ -22,3 +22,10 @@ export interface ChatMessage {
   icon?: 'error' | 'success';
   isThinking?: boolean;
 }
+
+export interface FileEdit {
+  path: string;
+  action: 'create' | 'update' | 'delete';
+  old_content: string | null;
+  new_content: string | null;
+}

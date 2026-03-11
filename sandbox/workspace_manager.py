@@ -11,13 +11,6 @@ _INIT_TTL = 60  # seconds — skip create_folder if workspace was confirmed rece
 
 
 class WorkspaceManager:
-    """
-    Manages the workspace directory inside a Daytona sandbox.
-
-    Uses a lightweight TTL cache (sandbox_id → timestamp) to avoid calling
-    create_folder on every single request. The cache is bounded by the number
-    of active sandboxes (not total users) and entries expire after _INIT_TTL seconds.
-    """
 
     SDK_PATH = "workspace"
 
@@ -39,7 +32,7 @@ class WorkspaceManager:
         if not dir_part:
             return code
         abs_dir = f"{self.base_path}/{dir_part}".replace("//", "/")
-        return f"import os\nos.chdir({repr(abs_dir)})\n{code}"
+        return f"import os\nos.makedirs({repr(abs_dir)}, exist_ok=True)\nos.chdir({repr(abs_dir)})\n{code}"
 
     async def initialize(self, sandbox, force: bool = False) -> bool:
         """

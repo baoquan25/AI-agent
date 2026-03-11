@@ -17,6 +17,9 @@ export function useFileContent(
   const fileCacheRef = useRef(fileCache);
   fileCacheRef.current = fileCache;
 
+  const currentFilePathRef = useRef(currentFilePath);
+  currentFilePathRef.current = currentFilePath;
+
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
   // Track paths saved in the last few seconds so the WebSocket "updated" handler
@@ -123,5 +126,28 @@ export function useFileContent(
 
   const wasRecentlySaved = useCallback((path: string) => recentlySavedRef.current.has(path), []);
 
-  return { codeValue, setCodeValue, hasUnsavedChanges, loadFileContent, handleCodeChange, saveAllFiles, wasRecentlySaved };
+  const setFileContentDirect = useCallback(
+    (path: string, content: string | null) => {
+      if (content != null) {
+        setFileCache((prev) => ({ ...prev, [path]: { content, modified: false } }));
+        if (path === currentFilePathRef.current) {
+          setCodeValue(content);
+          setHasUnsavedChanges(false);
+        }
+      } else {
+        setFileCache((prev) => {
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        if (path === currentFilePathRef.current) {
+          setCodeValue('');
+          setHasUnsavedChanges(false);
+        }
+      }
+    },
+    [setFileCache],
+  );
+
+  return { codeValue, setCodeValue, hasUnsavedChanges, loadFileContent, handleCodeChange, saveAllFiles, wasRecentlySaved, setFileContentDirect };
 }

@@ -85,6 +85,19 @@ async def _invalidate_parent_cache(user_id: str, path: str) -> None:
 router = APIRouter(prefix="/fs", tags=["FileSystem"])
 
 
+class _NotifyBody(__import__("pydantic").BaseModel):
+    path: str
+    change: str = "updated"
+
+
+@router.post("/notify")
+async def notify_file_change(body: _NotifyBody):
+    """External notification (e.g. agent SDK) — invalidate cache + emit WS event."""
+    safe = body.path.strip().strip("/")
+    _emit(safe, body.change)
+    return {"ok": True}
+
+
 @router.websocket("/watch")
 async def watch_file_changes(websocket: WebSocket):
     """WebSocket endpoint for real-time file change events.
@@ -106,7 +119,7 @@ async def watch_file_changes(websocket: WebSocket):
     from services.event_broadcaster import broadcaster
 
     await websocket.accept()
-    queue = broadcaster.subscribe()
+    queue = await broadcaster.subscribe()
     logger.info("WS /fs/watch: client connected")
     try:
         # Send a ready message so client knows the channel is live.
@@ -139,7 +152,7 @@ async def watch_file_changes(websocket: WebSocket):
     except Exception as e:
         logger.error("WS /fs/watch error: %s", e)
     finally:
-        broadcaster.unsubscribe(queue)
+        await broadcaster.unsubscribe(queue)
         logger.info("WS /fs/watch: client disconnected")
 
 

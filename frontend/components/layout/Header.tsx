@@ -19,7 +19,7 @@ export function Header({
 }: HeaderProps) {
   return (
     <header>
-      <span className="brand">Agent</span>
+      <span className="brand">Cursor</span>
       <div className="header-actions">
         <button
           type="button"

@@ -1,15 +1,65 @@
-# See http://help.github.com/ignore-files/ for more about ignoring files.
+# ─── Environment & secrets ─────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# compiled output
+# ─── Python ────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+**/.venv
+__pycache__/
+**/__pycache__/
+.pycache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+**/*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+.pytest_cache/
+**/.pytest_cache/
+.mypy_cache/
+**/.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.coverage
+htmlcov/
+**/poetry.lock
+!/poetry.lock
+
+# ─── Node / Next.js / frontend ──────────────────────────────────────────
+node_modules
+.pnp
+.pnp.js
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+package-lock.json
+.next/
+out/
+out-tsc
 dist
 tmp
-out-tsc
+build/
+vite.config.*.timestamp*
+vitest.config.*.timestamp*
+*.tsbuildinfo
+.vercel
 
-# dependencies
-node_modules
-package-lock.json
-
-# IDEs and editors
+# ─── IDEs and editors ───────────────────────────────────────────────────
+.idea/
 /.idea
 .project
 .classpath
@@ -18,69 +68,46 @@ package-lock.json
 .settings/
 *.sublime-workspace
 .cursor
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+*.swp
+*.swo
 
-# misc
+# ─── Logs & cache ───────────────────────────────────────────────────────
+*.log
+logs/
+.cache/
+.eslintcache
+.tmp/
 /.sass-cache
 /connect.lock
 /coverage
 /libpeerconnection.log
-npm-debug.log
-yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 testem.log
 /typings
-
-# System Files
-.DS_Store
-Thumbs.db
-
 .nx/cache
 .nx/workspace-data
 
-vite.config.*.timestamp*
-vitest.config.*.timestamp*
+# ─── System & misc ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 
-# yarn
-# https://yarnpkg.com/getting-started/qa#which-files-should-be-gitignored
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
-
-.eslintcache
-.tmp/
-.env
-.env.local
-.env.*.local
-
-# Python package metadata
-*.egg-info/
-*.egg
-*.pyc
-__pycache__/
-
-# Ruby gem artifacts
+# Ruby (if any)
 *.gem
 **/.bundle/
 **/vendor/bundle
 **/Gemfile.lock
 !/Gemfile.lock
 
+# Project-specific
 examples/**/*.png
-
-**/.venv
-**/poetry.lock
-!/poetry.lock
+sandbox/workspace/
 .astro
 .github/instructions/nx.instructions.md
-
 go.work.sum

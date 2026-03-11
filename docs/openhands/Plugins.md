@@ -1,0 +1,487 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.openhands.dev/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Plugins
+
+> Plugins bundle skills, hooks, MCP servers, agents, and commands into reusable packages that extend agent capabilities.
+
+export const path_to_script_0 = "examples/05_skills_and_plugins/02_loading_plugins/main.py"
+
+Plugins provide a way to package and distribute multiple agent components together. A single plugin can include:
+
+* **Skills**: Specialized knowledge and workflows
+* **Hooks**: Event handlers for tool lifecycle
+* **MCP Config**: External tool server configurations
+* **Agents**: Specialized agent definitions
+* **Commands**: Slash commands
+
+The plugin format is compatible with the [Claude Code plugin structure](https://github.com/anthropics/claude-code/tree/main/plugins).
+
+## Plugin Structure
+
+<Note>
+  See the [example\_plugins directory](https://github.com/OpenHands/software-agent-sdk/tree/main/examples/05_skills_and_plugins/02_loading_plugins/example_plugins) for a complete working plugin structure.
+</Note>
+
+A plugin follows this directory structure:
+
+<Tree>
+  <Tree.Folder name={"plugin-name"} defaultOpen>
+    <Tree.Folder name=".plugin" defaultOpen>
+      <Tree.File name="plugin.json" />
+    </Tree.Folder>
+
+    <Tree.Folder name="skills" defaultOpen>
+      <Tree.Folder name="skill-name">
+        <Tree.File name="SKILL.md" />
+      </Tree.Folder>
+    </Tree.Folder>
+
+    <Tree.Folder name="hooks" defaultOpen>
+      <Tree.File name="hooks.json" />
+    </Tree.Folder>
+
+    <Tree.Folder name="agents" defaultOpen>
+      <Tree.File name="agent-name.md" />
+    </Tree.Folder>
+
+    <Tree.Folder name="commands" defaultOpen>
+      <Tree.File name="command-name.md" />
+    </Tree.Folder>
+
+    <Tree.File name=".mcp.json" />
+
+    <Tree.File name="README.md" />
+  </Tree.Folder>
+</Tree>
+
+Note that the plugin metadata, i.e., `plugin-name/.plugin/plugin.json`, is required.
+
+### Plugin Manifest
+
+The manifest file `plugin-name/.plugin/plugin.json` defines plugin metadata:
+
+```json icon="file-code" wrap theme={null}
+{
+  "name": "code-quality",
+  "version": "1.0.0",
+  "description": "Code quality tools and workflows",
+  "author": "openhands",
+  "license": "MIT",
+  "repository": "https://github.com/example/code-quality-plugin"
+}
+```
+
+### Skills
+
+Skills are defined in markdown files with YAML frontmatter:
+
+```markdown icon="file-code" theme={null}
+---
+name: python-linting
+description: Instructions for linting Python code
+trigger:
+  type: keyword
+  keywords:
+    - lint
+    - linting
+    - code quality
+---
+
+# Python Linting Skill
+
+Run ruff to check for issues:
+
+\`\`\`bash
+ruff check .
+\`\`\`
+```
+
+### Hooks
+
+Hooks are defined in `hooks/hooks.json`:
+
+```json icon="file-code" wrap theme={null}
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "file_editor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'File edited: $OPENHANDS_TOOL_NAME'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### MCP Configuration
+
+MCP servers are configured in `.mcp.json`:
+
+```json wrap icon="file-code" theme={null}
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    }
+  }
+}
+```
+
+## Using Plugin Components
+
+> The ready-to-run example is available [here](#ready-to-run-example)!
+
+Brief explanation on how to use a plugin with an agent.
+
+<Steps>
+  <Step>
+    ### Loading a Plugin
+
+    First, load the desired plugins.
+
+    ```python icon="python" theme={null}
+    from openhands.sdk.plugin import Plugin
+
+    # Load a single plugin
+    plugin = Plugin.load("/path/to/plugin")
+
+    # Load all plugins from a directory
+    plugins = Plugin.load_all("/path/to/plugins")
+    ```
+  </Step>
+
+  <Step>
+    ### Accessing Components
+
+    You can access the different plugin components to see which ones are available.
+
+    ```python icon="python" theme={null}
+    # Skills
+    for skill in plugin.skills:
+        print(f"Skill: {skill.name}")
+
+    # Hooks configuration
+    if plugin.hooks:
+        print(f"Hooks configured: {plugin.hooks}")
+
+    # MCP servers
+    if plugin.mcp_config:
+        servers = plugin.mcp_config.get("mcpServers", {})
+        print(f"MCP servers: {list(servers.keys())}")
+    ```
+  </Step>
+
+  <Step>
+    ### Using with an Agent
+
+    You can now feed your agent with your preferred plugin.
+
+    ```python focus={3,10,17} icon="python" theme={null}
+    # Create agent context with plugin skills
+    agent_context = AgentContext(
+        skills=plugin.skills,
+    )
+
+    # Create agent with plugin MCP config
+    agent = Agent(
+        llm=llm,
+        tools=tools,
+        mcp_config=plugin.mcp_config or {},
+        agent_context=agent_context,
+    )
+
+    # Create conversation with plugin hooks
+    conversation = Conversation(
+        agent=agent,
+        hook_config=plugin.hooks,
+    )
+    ```
+  </Step>
+</Steps>
+
+## Ready-to-run Example
+
+The example below demonstrates plugin loading via Conversation and plugin management utilities (install, list, update, uninstall).
+
+<Note>
+  This example is available on GitHub: [examples/05\_skills\_and\_plugins/02\_loading\_plugins/main.py](https://github.com/OpenHands/software-agent-sdk/blob/main/examples/05_skills_and_plugins/02_loading_plugins/main.py)
+</Note>
+
+```python icon="python" expandable examples/05_skills_and_plugins/02_loading_plugins/main.py theme={null}
+"""Example: Loading and Managing Plugins
+
+This example demonstrates plugin loading and management in the SDK:
+
+1. Loading plugins via Conversation (PluginSource)
+2. Installing plugins to persistent storage
+3. Listing, updating, and uninstalling plugins
+
+Plugins bundle skills, hooks, and MCP config together.
+
+Supported plugin sources:
+- Local path: /path/to/plugin
+- GitHub shorthand: github:owner/repo
+- Git URL: https://github.com/owner/repo.git
+- With ref: branch, tag, or commit SHA
+- With repo_path: subdirectory for monorepos
+
+For full documentation, see: https://docs.all-hands.dev/sdk/guides/plugins
+"""
+
+import os
+import tempfile
+from pathlib import Path
+
+from pydantic import SecretStr
+
+from openhands.sdk import LLM, Agent, Conversation
+from openhands.sdk.plugin import (
+    PluginFetchError,
+    PluginSource,
+    install_plugin,
+    list_installed_plugins,
+    load_installed_plugins,
+    uninstall_plugin,
+)
+from openhands.sdk.tool import Tool
+from openhands.tools.file_editor import FileEditorTool
+from openhands.tools.terminal import TerminalTool
+
+
+# Locate example plugin directory
+script_dir = Path(__file__).parent
+local_plugin_path = script_dir / "example_plugins" / "code-quality"
+
+
+def demo_conversation_with_plugins(llm: LLM) -> None:
+    """Demo 1: Load plugins via Conversation's plugins parameter.
+
+    This is the recommended way to use plugins - they are loaded lazily
+    when the conversation starts.
+    """
+    print("\n" + "=" * 60)
+    print("DEMO 1: Loading plugins via Conversation")
+    print("=" * 60)
+
+    # Define plugins to load
+    plugins = [
+        PluginSource(source=str(local_plugin_path)),
+        # Examples of other sources:
+        # PluginSource(source="github:owner/repo", ref="v1.0.0"),
+        # PluginSource(source="github:owner/monorepo", repo_path="plugins/my-plugin"),
+    ]
+
+    agent = Agent(
+        llm=llm,
+        tools=[Tool(name=TerminalTool.name), Tool(name=FileEditorTool.name)],
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        conversation = Conversation(
+            agent=agent,
+            workspace=tmpdir,
+            plugins=plugins,
+        )
+
+        # The "lint" keyword triggers the python-linting skill
+        conversation.send_message("How do I lint Python code? Brief answer please.")
+
+        # Verify skills were loaded
+        skills = (
+            conversation.agent.agent_context.skills
+            if conversation.agent.agent_context
+            else []
+        )
+        print(f"✓ Loaded {len(skills)} skill(s) from plugins")
+
+        conversation.run()
+
+
+def demo_install_local_plugin(installed_dir: Path) -> None:
+    """Demo 2: Install a plugin from a local path.
+
+    Useful for development or local-only plugins.
+    """
+    print("\n" + "=" * 60)
+    print("DEMO 2: Installing plugin from local path")
+    print("=" * 60)
+
+    info = install_plugin(source=str(local_plugin_path), installed_dir=installed_dir)
+    print(f"✓ Installed: {info.name} v{info.version}")
+    print(f"  Source: {info.source}")
+    print(f"  Path: {info.install_path}")
+
+
+def demo_install_github_plugin(installed_dir: Path) -> None:
+    """Demo 3: Install a plugin from GitHub.
+
+    Demonstrates the github:owner/repo shorthand with repo_path for monorepos.
+    """
+    print("\n" + "=" * 60)
+    print("DEMO 3: Installing plugin from GitHub")
+    print("=" * 60)
+
+    try:
+        # Install from anthropics/skills repository
+        info = install_plugin(
+            source="github:anthropics/skills",
+            repo_path="skills/pptx",
+            ref="main",
+            installed_dir=installed_dir,
+        )
+        print(f"✓ Installed: {info.name} v{info.version}")
+        print(f"  Source: {info.source}")
+        print(f"  Resolved ref: {info.resolved_ref}")
+
+    except PluginFetchError as e:
+        print(f"⚠ Could not fetch from GitHub: {e}")
+        print("  (Network or rate limiting issue)")
+
+
+def demo_list_and_load_plugins(installed_dir: Path) -> None:
+    """Demo 4: List and load installed plugins."""
+    print("\n" + "=" * 60)
+    print("DEMO 4: List and load installed plugins")
+    print("=" * 60)
+
+    # List installed plugins
+    print("Installed plugins:")
+    for info in list_installed_plugins(installed_dir=installed_dir):
+        print(f"  - {info.name} v{info.version} ({info.source})")
+
+    # Load plugins as Plugin objects
+    plugins = load_installed_plugins(installed_dir=installed_dir)
+    print(f"\nLoaded {len(plugins)} plugin(s):")
+    for plugin in plugins:
+        skills = plugin.get_all_skills()
+        print(f"  - {plugin.name}: {len(skills)} skill(s)")
+
+
+def demo_uninstall_plugins(installed_dir: Path) -> None:
+    """Demo 5: Uninstall plugins."""
+    print("\n" + "=" * 60)
+    print("DEMO 5: Uninstalling plugins")
+    print("=" * 60)
+
+    for info in list_installed_plugins(installed_dir=installed_dir):
+        uninstall_plugin(info.name, installed_dir=installed_dir)
+        print(f"✓ Uninstalled: {info.name}")
+
+    remaining = list_installed_plugins(installed_dir=installed_dir)
+    print(f"\nRemaining plugins: {len(remaining)}")
+
+
+# Main execution
+if __name__ == "__main__":
+    api_key = os.getenv("LLM_API_KEY")
+    if not api_key:
+        print("Set LLM_API_KEY to run the full example")
+        print("Running install/uninstall demos only...")
+        llm = None
+    else:
+        model = os.getenv("LLM_MODEL", "anthropic/claude-sonnet-4-5-20250929")
+        llm = LLM(
+            usage_id="plugin-demo",
+            model=model,
+            api_key=SecretStr(api_key),
+            base_url=os.getenv("LLM_BASE_URL"),
+        )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        installed_dir = Path(tmpdir) / "installed"
+        installed_dir.mkdir()
+
+        # Demo 1: Conversation with plugins (requires LLM)
+        if llm:
+            demo_conversation_with_plugins(llm)
+
+        # Demo 2-5: Plugin management (no LLM required)
+        demo_install_local_plugin(installed_dir)
+        demo_install_github_plugin(installed_dir)
+        demo_list_and_load_plugins(installed_dir)
+        demo_uninstall_plugins(installed_dir)
+
+    print("\n" + "=" * 60)
+    print("EXAMPLE COMPLETED SUCCESSFULLY")
+    print("=" * 60)
+
+    if llm:
+        print(f"EXAMPLE_COST: {llm.metrics.accumulated_cost:.4f}")
+    else:
+        print("EXAMPLE_COST: 0")
+```
+
+You can run the example code as-is.
+
+<Note>
+  The model name should follow the [LiteLLM convention](https://models.litellm.ai/): `provider/model_name` (e.g., `anthropic/claude-sonnet-4-5-20250929`, `openai/gpt-4o`).
+  The `LLM_API_KEY` should be the API key for your chosen provider.
+</Note>
+
+<CodeGroup>
+  <CodeBlock language="bash" filename="Bring-your-own provider key" icon="terminal" wrap>
+    {`export LLM_API_KEY="your-api-key"\nexport LLM_MODEL="anthropic/claude-sonnet-4-5-20250929"  # or openai/gpt-4o, etc.\ncd software-agent-sdk\nuv run python ${path_to_script_0}`}
+  </CodeBlock>
+
+  <CodeBlock language="bash" filename="OpenHands Cloud" icon="terminal" wrap>
+    {`# https://app.all-hands.dev/settings/api-keys\nexport LLM_API_KEY="your-openhands-api-key"\nexport LLM_MODEL="openhands/claude-sonnet-4-5-20250929"\ncd software-agent-sdk\nuv run python ${path_to_script_0}`}
+  </CodeBlock>
+</CodeGroup>
+
+<Tip>
+  **ChatGPT Plus/Pro subscribers**: You can use `LLM.subscription_login()` to authenticate with your ChatGPT account and access Codex models without consuming API credits. See the [LLM Subscriptions guide](/sdk/guides/llm-subscriptions) for details.
+</Tip>
+
+## Installing Plugins to Persistent Storage
+
+The SDK provides utilities to install plugins to a local directory (`~/.openhands/plugins/installed/` by default). Installed plugins are tracked in `.installed.json`, which stores metadata including a persistent enabled flag.
+
+Use `list_installed_plugins()` to see all tracked plugins (enabled and disabled). Use `load_installed_plugins()` to load only enabled plugins. Toggle plugins on/off with `enable_plugin()` and `disable_plugin()` without uninstalling.
+
+```python icon="python" theme={null}
+from openhands.sdk.plugin import (
+    disable_plugin,
+    enable_plugin,
+    install_plugin,
+    list_installed_plugins,
+    load_installed_plugins,
+    uninstall_plugin,
+)
+
+# Install from local path or GitHub
+install_plugin(source="/path/to/plugin")
+install_plugin(source="github:owner/repo", ref="v1.0.0")
+
+# List installed plugins (includes enabled + disabled)
+for info in list_installed_plugins():
+    status = "enabled" if info.enabled else "disabled"
+    print(f"{info.name} v{info.version} ({status})")
+
+# Disable a plugin (won't be loaded until re-enabled)
+disable_plugin("plugin-name")
+
+# Load only enabled plugins for your agent
+plugins = load_installed_plugins()
+
+# Later: re-enable and reload
+enable_plugin("plugin-name")
+plugins = load_installed_plugins()
+
+# Uninstall
+uninstall_plugin("plugin-name")
+```
+
+## Next Steps
+
+* **[Skills](/sdk/guides/skill)** - Learn more about skills and triggers
+* **[Hooks](/sdk/guides/hooks)** - Understand hook event types
+* **[MCP Integration](/sdk/guides/mcp)** - Configure external tool servers

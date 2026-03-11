@@ -20,6 +20,7 @@ import { useResize } from '../hooks/useResize';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useFileWatch } from '../hooks/useFileWatch';
 import type { FileChangeEvent } from '../hooks/useFileWatch';
+import { useDiffReview } from '../hooks/useDiffReview';
 
 export default function Home() {
   const loadFileTreeRef = useRef<() => Promise<void>>(() => Promise.resolve());
@@ -35,7 +36,11 @@ export default function Home() {
   );
   const search = useSearch();
   const terminal = useTerminal();
-  const chat = useChat(runCode.setOutputHtml, terminal.setOutputTab, () => loadFileTreeRef.current());
+  const diffReview = useDiffReview(
+    fileContent.setFileContentDirect,
+    fileTabs.currentFilePath,
+  );
+  const chat = useChat(runCode.setOutputHtml, terminal.setOutputTab, () => loadFileTreeRef.current(), diffReview.addDiffs);
 
   const fileTree = useFileTree(
     fileTabs.openTabs,
@@ -156,7 +161,7 @@ export default function Home() {
   const [showLeftBar, setShowLeftBar] = useState(true);
   const [showAgentPanel, setShowAgentPanel] = useState(false);
   const leftBarVisible = showLeftBar;
-  const rightBarVisible = chat.chatSessions.length > 0 || showAgentPanel;
+  const rightBarVisible = showAgentPanel;
   const outputPanelVisible = resize.editorFlex < 100;
 
   const handleCloseTab = useCallback(
@@ -272,6 +277,13 @@ export default function Home() {
             onSwitchTab={fileTabs.switchTab}
             onCloseTab={handleCloseTab}
             onRun={handleRun}
+            pendingDiffs={diffReview.pendingDiffs}
+            reviewIndex={diffReview.reviewIndex}
+            onSetReviewIndex={diffReview.setReviewIndex}
+            onAcceptDiff={diffReview.acceptDiff}
+            onRejectDiff={diffReview.rejectDiff}
+            onAcceptAll={diffReview.acceptAll}
+            onRejectAll={diffReview.rejectAll}
           />
           <Resizer kind="editor" resizing={resize.resizing} onMouseDown={resize.startResizeEditor} title="Kéo để đổi chiều cao" />
           <OutputSection

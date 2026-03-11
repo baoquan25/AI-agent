@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.31",
+    "@langchain/langgraph-sdk": "^1.6.5",
     "@monaco-editor/react": "^4.7.0",
     "@vscode/codicons": "^0.0.44",
     "@xterm/addon-fit": "^0.11.0",

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sandbox"
+version = "0.1.0"
+description = "FastAPI sandbox project"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "httpx",
+    "aiofiles",
+    "requests",
+    "pydantic",
+    "python-dotenv",
+    "openhands-sdk",
+    "langchain",
+    "langchain-openai",
+    "langgraph",
+    "daytona>=0.143,<0.150",
+    "wsproto",
+]
+
+[tool.setuptools.packages.find]
+include = ["agent*", "sandbox*"]

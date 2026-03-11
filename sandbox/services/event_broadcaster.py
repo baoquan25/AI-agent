@@ -263,7 +263,12 @@ class EventBroadcaster:
             payload = {
                 "type": "fileChange",
                 "changes": [
-                    {"path": e.path, "change": e.change.value} for e in chunk
+                    {
+                        "path": e.path,
+                        "changeType": {"added": "created", "updated": "updated", "deleted": "deleted"}.get(e.change.value, e.change.value),
+                        "isDirectory": False,
+                    }
+                    for e in chunk
                 ],
                 "timestamp": time.time(),
             }

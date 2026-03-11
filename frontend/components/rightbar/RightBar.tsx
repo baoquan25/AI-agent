@@ -47,7 +47,7 @@ export function RightBar(props: RightBarProps) {
   return (
     <div
       id="rightBar"
-      style={{ width, minWidth: sessions.length > 0 ? 200 : 0, flex: 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      style={{ width, minWidth: 0, flex: 'none', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
     >
       <div className="rightbar-tabs-bar">
         <div className="rightbar-tabs">

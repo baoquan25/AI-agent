@@ -1,0 +1,50 @@
+# ─── Git & version control ─────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ─── Environment & secrets ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Python ────────────────────────────────────────────────────────────
+**/__pycache__
+**/*.py[cod]
+**/*.pyo
+**/.venv
+**/venv
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+**/dist
+**/build
+
+# ─── Node / frontend (giữ source, bỏ deps & build) ─────────────────────
+**/node_modules
+**/.next
+**/out
+**/.pnpm-store
+**/.yarn/cache
+**/.yarn/unplugged
+**/dist
+**/*.tsbuildinfo
+
+# ─── IDE & editor ─────────────────────────────────────────────────────
+.idea
+.vscode
+.cursor
+
+# ─── Logs & cache ───────────────────────────────────────────────────────
+**/*.log
+**/logs
+**/.cache
+**/.nx/cache
+
+# ─── OS & misc ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.md
+!README.md
+

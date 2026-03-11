@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from services.jupyter_executor import JupyterKernelExecutor
@@ -10,23 +11,59 @@ logger = logging.getLogger("daytona-api")
 
 class ExecutionService:
 
-    def run_code(self, sandbox, code: str, *, use_jupyter: bool = True, timeout: int = 30) -> dict[str, Any]:
+    def run_code(
+        self,
+        sandbox,
+        code: str,
+        *,
+        use_jupyter: bool = True,
+        timeout: int = 30,
+        file_path: str | None = None,
+    ) -> dict[str, Any]:
+        if file_path:
+            return self._run_for_file_type(
+                sandbox=sandbox,
+                code=code,
+                file_path=file_path,
+                use_jupyter=use_jupyter,
+                timeout=timeout,
+            )
         if use_jupyter:
             return self._run_jupyter(sandbox, code, timeout)
         return self._run_direct(sandbox, code, timeout)
 
+    def _run_for_file_type(
+        self,
+        sandbox,
+        code: str,
+        *,
+        file_path: str,
+        use_jupyter: bool,
+        timeout: int,
+    ) -> dict[str, Any]:
+        extension = os.path.splitext(file_path)[1].lower()
+
+        if extension == ".py":
+            if use_jupyter:
+                return self._run_jupyter(sandbox, code, timeout)
+            return self._run_direct(sandbox, code, timeout)
+
+        return {
+            "output": "Code language not supported or defined.",
+            "exit_code": 1,
+            "success": False,
+            "outputs": [],
+        }
+
     def _run_jupyter(self, sandbox, code: str, timeout: int) -> dict[str, Any]:
-        """Run via Jupyter kernel, fallback to direct if IPython missing."""
+
         executor = JupyterKernelExecutor(sandbox)
         result = executor.execute(code, timeout=timeout)
 
         error_text = result.get("error", "") or ""
-
-        # Fallback if sandbox lacks IPython
-        if "No module named 'IPython'" in error_text:
-            direct = self._run_direct(sandbox, code, timeout)
-            direct["output"] += "\n\nNote: Executed without IPython"
-            return direct
+        if error_text:
+            logger.warning("Jupyter run failed, using direct run")
+            return self._run_direct(sandbox, code, timeout)
 
         stdout_text = result.get("stdout", "") or ""
         stderr_text = result.get("stderr", "") or ""

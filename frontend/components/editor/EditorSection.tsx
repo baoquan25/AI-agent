@@ -1,8 +1,9 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import type { TabItem } from '../../lib/types';
+import type { TabItem, FileEdit } from '../../lib/types';
 import { EditorTabs } from './EditorTabs';
+import { DiffReview } from './DiffReview';
 
 const CodeArea = dynamic(() => import('./CodeArea').then((m) => m.CodeArea), {
   ssr: false,
@@ -21,6 +22,13 @@ type EditorSectionProps = {
   onSwitchTab: (path: string) => void;
   onCloseTab: (path: string) => void;
   onRun: () => void;
+  pendingDiffs: FileEdit[];
+  reviewIndex: number;
+  onSetReviewIndex: (idx: number) => void;
+  onAcceptDiff: (path: string) => void;
+  onRejectDiff: (path: string) => void;
+  onAcceptAll: () => void;
+  onRejectAll: () => void;
 };
 
 export function EditorSection(props: EditorSectionProps) {
@@ -36,11 +44,30 @@ export function EditorSection(props: EditorSectionProps) {
     onSwitchTab,
     onCloseTab,
     onRun,
+    pendingDiffs,
+    reviewIndex,
+    onSetReviewIndex,
+    onAcceptDiff,
+    onRejectDiff,
+    onAcceptAll,
+    onRejectAll,
   } = props;
+
+  const showDiffReview = pendingDiffs.length > 0;
 
   return (
     <div className="section" id="editorSection" style={{ flex: `${editorFlex} 0 0` }}>
-        {openTabs.length > 0 && (
+        {showDiffReview ? (
+          <DiffReview
+            pendingDiffs={pendingDiffs}
+            reviewIndex={reviewIndex}
+            onSetReviewIndex={onSetReviewIndex}
+            onAccept={onAcceptDiff}
+            onReject={onRejectDiff}
+            onAcceptAll={onAcceptAll}
+            onRejectAll={onRejectAll}
+          />
+        ) : openTabs.length > 0 ? (
           <>
             <div className="editor-tabs-bar">
               <EditorTabs
@@ -72,7 +99,7 @@ export function EditorSection(props: EditorSectionProps) {
               chatLoading={chatLoading}
             />
           </>
-        )}
+        ) : null}
     </div>
   );
 }
