@@ -39,6 +39,7 @@ export default function Home() {
   const diffReview = useDiffReview(
     fileContent.setFileContentDirect,
     fileTabs.currentFilePath,
+    fileTabs.addTab,
   );
   const chat = useChat(runCode.setOutputHtml, terminal.setOutputTab, () => loadFileTreeRef.current(), diffReview.addDiffs);
 
@@ -73,7 +74,31 @@ export default function Home() {
       switch (change.changeType) {
         case 'created': {
           const name = path.split('/').pop() || path;
-          fileTree.insertNode(parentPath, { type: 'file', name, path });
+
+          if (parentPath) {
+            const parts = parentPath.split('/');
+            for (let i = 0; i < parts.length; i++) {
+              const ancestorPath = parts.slice(0, i + 1).join('/');
+              const ancestorParent = i === 0 ? '' : parts.slice(0, i).join('/');
+              const ancestorName = parts[i];
+              fileTree.insertNode(ancestorParent, {
+                type: 'directory', name: ancestorName, path: ancestorPath, children: [],
+              });
+            }
+            fileTree.setExpandedFolders((prev) => {
+              const next = new Set(prev);
+              for (let i = 0; i < parts.length; i++) {
+                next.add(parts.slice(0, i + 1).join('/'));
+              }
+              return next;
+            });
+          }
+
+          if (change.isDirectory) {
+            fileTree.insertNode(parentPath, { type: 'directory', name, path, children: [] });
+          } else {
+            fileTree.insertNode(parentPath, { type: 'file', name, path });
+          }
           fileTree.scheduleRefreshFolderList(parentPath);
           break;
         }

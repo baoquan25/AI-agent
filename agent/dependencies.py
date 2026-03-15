@@ -1,6 +1,3 @@
-# pyright: basic
-# type: ignore
-
 from daytona import Daytona, DaytonaConfig
 from daytona_api_client import SandboxState
 from daytona.common.errors import DaytonaError

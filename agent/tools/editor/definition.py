@@ -42,7 +42,8 @@ When making multiple edits to the same file, send all edits in a single message.
 
 class FileEditorAction(Action):
     command: CommandLiteral = Field(
-        description="One of: view, create, str_replace, insert, undo_edit"
+        description="The commands to run. Allowed options are: `view`, `create`, "
+        "`str_replace`, `insert`, `undo_edit`."
     )
     path: str = Field(description="Absolute path to file or directory inside sandbox")
     file_text: Optional[str] = Field(

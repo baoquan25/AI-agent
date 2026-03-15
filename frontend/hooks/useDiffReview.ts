@@ -7,6 +7,7 @@ import type { FileEdit } from '../lib/types';
 export function useDiffReview(
   setFileContentDirect: (path: string, content: string | null) => void,
   currentFilePath: string | null,
+  addTab: (path: string, name: string) => void,
 ) {
   const [pendingDiffs, setPendingDiffs] = useState<FileEdit[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
@@ -16,6 +17,9 @@ export function useDiffReview(
 
   const pendingDiffsRef = useRef(pendingDiffs);
   pendingDiffsRef.current = pendingDiffs;
+
+  const addTabRef = useRef(addTab);
+  addTabRef.current = addTab;
 
   const addDiffs = useCallback((edits: FileEdit[]) => {
     if (!edits || edits.length === 0) return;
@@ -36,12 +40,20 @@ export function useDiffReview(
     if (!diff) return;
 
     setFileContentDirect(path, diff.new_content);
+    const remaining = pendingDiffsRef.current.filter((d) => d.path !== path);
     removeDiff(path);
+
+    if (remaining.length === 0) {
+      const fileName = path.split('/').pop() || path;
+      addTabRef.current(path, fileName);
+    }
   }, [setFileContentDirect, removeDiff]);
 
   const rejectDiff = useCallback(async (path: string) => {
     const diff = pendingDiffsRef.current.find((d) => d.path === path);
     if (!diff) return;
+
+    const remaining = pendingDiffsRef.current.filter((d) => d.path !== path);
 
     if (diff.action === 'create') {
       await fsApi.deletePath(path).catch(() => {});
@@ -55,31 +67,50 @@ export function useDiffReview(
     }
 
     removeDiff(path);
+
+    if (remaining.length === 0 && diff.action !== 'create') {
+      const fileName = path.split('/').pop() || path;
+      addTabRef.current(path, fileName);
+    }
   }, [setFileContentDirect, removeDiff]);
 
   const acceptAll = useCallback(() => {
-    for (const diff of pendingDiffsRef.current) {
+    const diffs = pendingDiffsRef.current;
+    for (const diff of diffs) {
       setFileContentDirect(diff.path, diff.new_content);
     }
     setPendingDiffs([]);
     setReviewIndex(0);
+    if (diffs.length > 0) {
+      const last = diffs[diffs.length - 1];
+      const fileName = last.path.split('/').pop() || last.path;
+      addTabRef.current(last.path, fileName);
+    }
   }, [setFileContentDirect]);
 
   const rejectAll = useCallback(async () => {
-    for (const diff of pendingDiffsRef.current) {
+    const diffs = pendingDiffsRef.current;
+    let lastNonCreate: FileEdit | null = null;
+    for (const diff of diffs) {
       if (diff.action === 'create') {
         await fsApi.deletePath(diff.path).catch(() => {});
         setFileContentDirect(diff.path, null);
       } else if (diff.action === 'delete' && diff.old_content != null) {
         await fsApi.createFile(diff.path, diff.old_content).catch(() => {});
         setFileContentDirect(diff.path, diff.old_content);
+        lastNonCreate = diff;
       } else if (diff.old_content != null) {
         await fsApi.putFileContent(diff.path, diff.old_content).catch(() => {});
         setFileContentDirect(diff.path, diff.old_content);
+        lastNonCreate = diff;
       }
     }
     setPendingDiffs([]);
     setReviewIndex(0);
+    if (lastNonCreate) {
+      const fileName = lastNonCreate.path.split('/').pop() || lastNonCreate.path;
+      addTabRef.current(lastNonCreate.path, fileName);
+    }
   }, [setFileContentDirect]);
 
   const currentDiff = pendingDiffs[reviewIndex] ?? null;

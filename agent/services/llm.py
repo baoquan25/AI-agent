@@ -1,24 +1,26 @@
 import os
-import logging
 import uuid
 import asyncio
 from typing import Literal
-
-from pydantic import SecretStr
-
-from openhands.sdk import LLM, Agent, AgentContext, Conversation, Tool
+from openhands.sdk import LLM, Agent, Conversation, Tool, get_logger
 from openhands.sdk.llm.streaming import ModelResponseStream
 
 from config import settings
 from dependencies import WORKSPACE
 from tools.registry import create_tools
+from services.agent_context import agent_context
 
-logger = logging.getLogger("daytona-api")
-
+logger = get_logger(__name__)
 PERSISTENCE_DIR = "/tmp/openhands-conversations"
-
 StreamingState = Literal["thinking", "content", "tool_name", "tool_args"]
 
+llm = LLM(
+        usage_id="agent",
+        model=settings.LLM_MODEL,
+        api_key=settings.OPENAI_KEY,
+        reasoning_effort=settings.REASONING_EFFORT,
+        stream=True,
+    )
 
 def make_token_callback(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, content_parts: list[str]):
 
@@ -68,41 +70,13 @@ def run_agent(sandbox, user_id: str, message: str, conversation_id: str | None =
     local_workspace = os.path.join("/tmp", "openhands_workspaces", user_id.replace(os.sep, "_"))
     os.makedirs(local_workspace, exist_ok=True)
 
-    llm = LLM(
-        usage_id="agent",
-        model=settings.LLM_MODEL,
-        api_key=SecretStr(settings.OPENAI_KEY),
-        reasoning_effort="low",
-        stream=True,
-    )
-
     agent = Agent(
         llm=llm,
         tools=[Tool(name=toolset_name)],
-        agent_context=AgentContext(
-            system_message_suffix="""
-<SANDBOX_ENVIRONMENT>
-You are operating inside a Daytona sandbox. The user's workspace is at: /home/daytona/workspace
-
-CRITICAL — Output panel rules:
-- The user's UI has an Output panel that shows code execution results (stdout, charts, images).
-- The ONLY way output appears in this panel is by calling the `daytona_run_file` tool.
-- After creating or editing any code file that the user wants to run, you MUST call `daytona_run_file` to execute it.
-- Do NOT write code and stop without running it — the user expects to see output after every code task.
-
-Workflow for code tasks:
-1. Write or edit the file using `daytona_file_editor` or `daytona_apply_patch`
-2. Immediately call `daytona_run_file` with the file path to execute it
-3. Report the output result to the user
-
-Example: If asked to "write a script that prints hello", you must:
-  → create the file → call daytona_run_file → show the user the output
-</SANDBOX_ENVIRONMENT>
-""",
-        ),
+        agent_context=agent_context,
     )
 
-    resolved_id = uuid.UUID(conversation_id) if conversation_id else None
+    resolved_id = uuid.UUID(conversation_id)
 
     content_parts: list[str] = []
     token_callbacks = []
@@ -117,8 +91,7 @@ Example: If asked to "write a script that prints hello", you must:
         conversation_id=resolved_id,
     )
 
-    full_message = f"[Sandbox workspace: {WORKSPACE}]\n{message}"
-    conversation.send_message(full_message)
+    conversation.send_message(message)
     conversation.run()
 
     return "".join(content_parts)

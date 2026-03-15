@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { FileEdit } from '../../lib/types';
 
@@ -18,6 +18,38 @@ const DiffEditorLazy = dynamic(
     ),
   },
 );
+
+function SafeDiffEditor(props: React.ComponentProps<typeof DiffEditorLazy>) {
+  const editorRef = useRef<import('monaco-editor').editor.IStandaloneDiffEditor | null>(null);
+  const monacoRef = useRef<typeof import('monaco-editor') | null>(null);
+
+  const handleBeforeMount = useCallback((monaco: typeof import('monaco-editor')) => {
+    monacoRef.current = monaco;
+    props.beforeMount?.(monaco);
+  }, [props.beforeMount]);
+
+  const handleMount = useCallback((editor: import('monaco-editor').editor.IStandaloneDiffEditor) => {
+    editorRef.current = editor;
+  }, []);
+
+  useLayoutEffect(() => {
+    return () => {
+      const editor = editorRef.current;
+      const monaco = monacoRef.current;
+      if (editor && monaco) {
+        try {
+          const tmpOrig = monaco.editor.createModel('', 'text/plain');
+          const tmpMod = monaco.editor.createModel('', 'text/plain');
+          editor.setModel({ original: tmpOrig, modified: tmpMod });
+        } catch { /* already disposed */ }
+        try { editor.dispose(); } catch { /* ignore */ }
+        editorRef.current = null;
+      }
+    };
+  }, []);
+
+  return <DiffEditorLazy {...props} beforeMount={handleBeforeMount} onMount={handleMount} />;
+}
 
 type DiffReviewProps = {
   pendingDiffs: FileEdit[];
@@ -122,24 +154,25 @@ export function DiffReview({
         <div className="diff-review-actions">
           {pendingDiffs.length > 1 && (
             <>
-              <button type="button" className="diff-btn diff-btn-accept-all" onClick={onAcceptAll}>
-                <span className="codicon codicon-check-all" /> Accept All
-              </button>
               <button type="button" className="diff-btn diff-btn-reject-all" onClick={onRejectAll}>
-                <span className="codicon codicon-close-all" /> Reject All
+                Reject All
+              </button>
+              <button type="button" className="diff-btn diff-btn-accept-all" onClick={onAcceptAll}>
+                Accept All
               </button>
             </>
           )}
-          <button type="button" className="diff-btn diff-btn-accept" onClick={() => onAccept(diff.path)}>
-            <span className="codicon codicon-check" /> Accept
-          </button>
           <button type="button" className="diff-btn diff-btn-reject" onClick={() => onReject(diff.path)}>
-            <span className="codicon codicon-close" /> Reject
+            Reject
+          </button>
+          <button type="button" className="diff-btn diff-btn-accept" onClick={() => onAccept(diff.path)}>
+            Accept
           </button>
         </div>
       </div>
       <div className="diff-review-editor">
-        <DiffEditorLazy
+        <SafeDiffEditor
+          key={diff.path}
           height="100%"
           language={language}
           original={diff.old_content ?? ''}
@@ -166,3 +199,4 @@ export function DiffReview({
     </div>
   );
 }
+

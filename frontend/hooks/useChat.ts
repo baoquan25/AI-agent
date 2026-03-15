@@ -85,15 +85,19 @@ export function useChat(
     setSessions((prev) => prev.map((s, i) => (i === idx ? { ...s, threadId } : s)));
   }, []);
 
+  const onThreadIdRef = useRef(onThreadId);
+  onThreadIdRef.current = onThreadId;
+
   const activeThreadId = activeSession?.threadId ?? undefined;
   const streamConfig = useMemo(() => ({
     apiUrl: `${AGENT_BASE}/conversation`,
     apiKey: getUserId(),
     assistantId: 'agent' as const,
     threadId: activeThreadId,
-    onThreadId,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [activeThreadId, onThreadId]);
+    onThreadId: (id: string) => {
+      queueMicrotask(() => onThreadIdRef.current(id));
+    },
+  }), [activeThreadId]);
 
   const stream = useStream(streamConfig);
 
@@ -110,11 +114,12 @@ export function useChat(
     prevKeyRef.current = key;
     if (!activeSession?.id) return;
     if (len === 0) return;
+    const sessionId = activeSession.id;
     const msgs: ChatMessage[] = stream.messages.map((m) => ({
       sender: m.type === 'human' ? ('user' as const) : ('ai' as const),
       text: extractText(m.content),
     }));
-    setMessagesMap((prev) => ({ ...prev, [activeSession.id]: msgs }));
+    queueMicrotask(() => setMessagesMap((prev) => ({ ...prev, [sessionId]: msgs })));
   }, [stream.messages, activeSession?.id]);
 
   // Render agent-triggered code outputs into the Output panel.
@@ -126,8 +131,10 @@ export function useChat(
     if (key === prevCodeOutputsKeyRef.current) return;
     prevCodeOutputsKeyRef.current = key;
     const html = renderCodeOutputs(codeOutputs as CodeOutput[]);
-    setOutputHtml(html);
-    setOutputTab('output');
+    queueMicrotask(() => {
+      setOutputHtml(html);
+      setOutputTab('output');
+    });
   }, [stream.values, setOutputHtml, setOutputTab]);
 
   const onFileEditsRef = useRef(onFileEdits);
@@ -141,7 +148,8 @@ export function useChat(
     const fileEdits = vals?.file_edits;
     if (!Array.isArray(fileEdits) || fileEdits.length === 0) return;
     prevEditsIdRef.current = editsId;
-    onFileEditsRef.current?.(fileEdits as FileEdit[]);
+    const edits = fileEdits as FileEdit[];
+    queueMicrotask(() => onFileEditsRef.current?.(edits));
   }, [stream.values]);
 
   const displayMessages = messagesMap[activeSession?.id ?? ''] ?? [];

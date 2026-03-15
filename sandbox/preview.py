@@ -1,8 +1,8 @@
 from daytona import Daytona
 
 daytona = Daytona()
-sandbox = daytona.find_one("387db1c5-80b9-4f2a-8883-c82fa6ef2258")
+sandbox = daytona.find_one("16495274-4d84-4a94-becb-bd47fabea0e3")
 
-preview = sandbox.get_preview_link(3800)
+preview = sandbox.get_preview_link(4000)
 print(preview.url)
 print(preview.token)

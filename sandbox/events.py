@@ -1,11 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-Application lifespan — initialise Daytona client, WorkspaceManager, FilesystemService,
-and the EventBroadcaster (WS /fs/watch, API-driven, no disk watcher).
-"""
-
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -13,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from daytona import Daytona, DaytonaConfig
 
-from config import DAYTONA_API_KEY, DAYTONA_API_URL
+from config import settings
 from workspace_manager import WorkspaceManager
 from services.filesystem_service import FilesystemService
 from services.file_watcher import WorkspaceCacheWatcher
@@ -26,8 +18,8 @@ logger = logging.getLogger("sandbox-api")
 async def lifespan(app: FastAPI):
     try:
         config = DaytonaConfig(
-            api_key=DAYTONA_API_KEY,
-            api_url=DAYTONA_API_URL,
+            api_key=settings.DAYTONA_API_KEY,
+            api_url=settings.DAYTONA_API_URL,
         )
         daytona_client = Daytona(config)
     except Exception as e:

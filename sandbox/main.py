@@ -1,14 +1,3 @@
-# pyright: basic
-# type: ignore
-
-import logging
-import sys
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s %(name)s | %(message)s",
-)
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn

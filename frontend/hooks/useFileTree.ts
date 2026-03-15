@@ -21,8 +21,13 @@ function insertNodeIntoTree(tree: TreeNode | null, parentPath: string, node: Tre
     if (pathMatch(np)) {
       const children = [...(n.children ?? [])];
       const existing = children.findIndex((c) => (c.path ?? `${np}/${c.name}`) === node.path);
-      if (existing >= 0) children[existing] = node;
-      else children.push(node);
+      if (existing >= 0) {
+        if (node.type === 'directory') {
+          children[existing] = { ...node, children: children[existing].children ?? node.children ?? [] };
+        } else {
+          children[existing] = node;
+        }
+      } else children.push(node);
       children.sort((a, b) => (a.type === b.type ? (a.name < b.name ? -1 : 1) : a.type === 'directory' ? -1 : 1));
       return { ...n, children };
     }

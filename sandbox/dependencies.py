@@ -6,7 +6,7 @@ from fastapi import HTTPException, Request, Header
 from daytona import CreateSandboxFromSnapshotParams
 from daytona_api_client import SandboxState
 
-from config import LANGUAGE, AUTO_STOP_INTERVAL, SNAPSHOT_NAME
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +41,9 @@ def _ensure_sandbox_started(sandbox, timeout: float = 60) -> bool:
 def _create_sandbox(daytona_client, user_id: str):
     """Create a new sandbox for user_id. SDK create() waits for start internally."""
     params = CreateSandboxFromSnapshotParams(
-        language=LANGUAGE,
-        auto_stop_interval=AUTO_STOP_INTERVAL,
-        snapshot=SNAPSHOT_NAME,
+        language=settings.LANGUAGE,
+        auto_stop_interval=settings.AUTO_STOP_INTERVAL,
+        snapshot=settings.SNAPSHOT_NAME,
         labels={"user-id": user_id},
     )
     return daytona_client.create(params)

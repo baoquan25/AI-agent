@@ -9,6 +9,7 @@ from tools.apply_patch import ApplyPatchTool
 from tools.grep import GrepTool
 from tools.glob import GlobTool
 from tools.terminal import DaytonaTerminalTool as TerminalTool
+from tools.browser_use import BrowserToolSet
 
 ALL_TOOLS = [
     # === Execution ===
@@ -22,6 +23,9 @@ ALL_TOOLS = [
     # === Search ===
     GrepTool,             # Search content inside files
     GlobTool,             # Find files by glob pattern (e.g. **/*.py)
+
+    # === Browser ===
+    BrowserToolSet,       # Web automation (navigate, click, type, tabs, storage, recording)
 ]
 
 
@@ -40,6 +44,8 @@ def create_tools(sandbox: Sandbox, user_id: str = "default_user",
                 instances = tool_cls.create(conv_state, sandbox=sandbox, execution_log=execution_log)
             elif tool_cls in (FileEditorTool, ApplyPatchTool):
                 instances = tool_cls.create(conv_state, sandbox=sandbox, file_edits=file_edits)
+            elif tool_cls is BrowserToolSet:
+                instances = tool_cls.create(conv_state)
             else:
                 instances = tool_cls.create(conv_state, sandbox=sandbox)
             tools.extend(instances)

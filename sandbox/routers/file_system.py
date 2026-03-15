@@ -20,7 +20,7 @@ def _emit(path: str, change: str) -> None:
 from fastapi import APIRouter, HTTPException, Header, Depends, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
-from config import FILE_CACHE_MAX_SIZE, FILE_CACHE_TTL_SECONDS
+from config import settings
 from dependencies import get_sandbox, get_filesystem_service
 from services.filesystem_service import normalize_path
 from services.conflict import check_write_conflict
@@ -49,8 +49,8 @@ MAX_TREE_DEPTH = 4
 # ── Global cache instance ───────────────────────────────────────────
 
 _file_cache = FileCache(
-    max_size=FILE_CACHE_MAX_SIZE,
-    ttl_seconds=FILE_CACHE_TTL_SECONDS,
+    max_size=settings.FILE_CACHE_MAX_SIZE,
+    ttl_seconds=settings.FILE_CACHE_TTL_SECONDS,
 )
 
 

@@ -1,14 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-DaytonaFileEditor — core logic adapted from OpenHands file_editor.
-
-All file I/O goes through Daytona sandbox SDK (sandbox.fs.*) instead of
-local filesystem. Encoding detection removed (always UTF-8 from sandbox).
-Image viewing / binary detection removed (not applicable for sandbox agent).
-"""
-
 import logging
 import posixpath
 import re
@@ -26,8 +15,6 @@ from .utils.config import SNIPPET_CONTEXT_WINDOW
 from tools.notify import notify_file_change
 from .utils.constants import MAX_RESPONSE_LEN_CHAR, TEXT_FILE_CONTENT_TRUNCATED_NOTICE
 
-logger = logging.getLogger("agent-api")
-
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 SNIPPET_CONTEXT = SNIPPET_CONTEXT_WINDOW
 
@@ -39,16 +26,6 @@ def _maybe_truncate(text: str, max_len: int = MAX_RESPONSE_LEN_CHAR) -> str:
 
 
 class DaytonaFileEditor:
-    """
-    str_replace-style file editor that operates on a remote Daytona sandbox.
-
-    Key differences from the upstream OpenHands FileEditor:
-    - File I/O via sandbox.fs (download_file, upload_file, list_files, etc.)
-    - Directory listing via sandbox.process.exec (find command)
-    - No encoding detection (always UTF-8)
-    - No binary/image handling
-    - In-memory undo history (simple dict[str, list[str]])
-    """
 
     def __init__(self, sandbox: Sandbox, max_history: int = 10, file_edits: list | None = None):
         self.sandbox = sandbox

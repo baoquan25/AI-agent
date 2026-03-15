@@ -19,10 +19,12 @@ dependencies = [
     "python-dotenv",
     "openhands-sdk",
     "langchain",
-    "langchain-openai",
     "langgraph",
     "daytona>=0.143,<0.150",
     "wsproto",
+    "browser-use==0.12.1",
+    "func-timeout",
+    "openai==2.16.0",  
 ]
 
 [tool.setuptools.packages.find]
