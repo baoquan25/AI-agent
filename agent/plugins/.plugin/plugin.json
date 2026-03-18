@@ -1,0 +1,8 @@
+{
+    "name": "code-quality",
+    "version": "1.0.0",
+    "description": "Code quality tools and workflows",
+    "author": "openhands",
+    "license": "MIT",
+    "repository": "https://github.com/example/code-quality-plugin"
+  }

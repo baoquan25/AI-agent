@@ -31,17 +31,17 @@ Examples:
 """
 
 
-class DaytonaGlobAction(Action):
+class GlobAction(Action):
     pattern: str = Field(
         description='The glob pattern to match files (e.g., "**/*.js", "src/**/*.ts")'
     )
     path: Optional[str] = Field(
-        default="/home/daytona/workspace",
+        default="/workspace",
         description="The directory to search in. Defaults to workspace root.",
     )
 
 
-class DaytonaGlobObservation(Observation):
+class GlobObservation(Observation):
     files: list[str] = Field(default_factory=list)
     pattern: str = ""
     search_path: str = ""
@@ -61,13 +61,13 @@ class DaytonaGlobObservation(Observation):
         )]
 
 
-class GlobExecutor(ToolExecutor[DaytonaGlobAction, DaytonaGlobObservation]):
+class GlobExecutor(ToolExecutor[GlobAction, GlobObservation]):
     def __init__(self, sandbox: Sandbox):
         self.sandbox = sandbox
 
-    def __call__(self, action: DaytonaGlobAction, conversation=None) -> DaytonaGlobObservation:
+    def __call__(self, action: GlobAction, conversation=None) -> GlobObservation:
         try:
-            search_path = action.path or "/home/daytona/workspace"
+            search_path = action.path or "/workspace"
             safe_path = search_path.replace("'", "'\\''")
             safe_pattern = action.pattern.replace("'", "'\\''")
 
@@ -78,7 +78,7 @@ class GlobExecutor(ToolExecutor[DaytonaGlobAction, DaytonaGlobObservation]):
             files = [line.strip() for line in output.strip().splitlines() if line.strip()]
             truncated = len(files) >= 100
 
-            return DaytonaGlobObservation(
+            return GlobObservation(
                 files=files,
                 pattern=action.pattern,
                 search_path=search_path,
@@ -86,24 +86,24 @@ class GlobExecutor(ToolExecutor[DaytonaGlobAction, DaytonaGlobObservation]):
                 success=True,
             )
         except Exception as e:
-            return DaytonaGlobObservation(
+            return GlobObservation(
                 files=[str(e)],
                 pattern=action.pattern,
-                search_path=action.path or "/home/daytona/workspace",
+                search_path=action.path or "/workspace",
                 success=False,
             )
 
 
-class GlobTool(ToolDefinition[DaytonaGlobAction, DaytonaGlobObservation]):
+class GlobTool(ToolDefinition[GlobAction, GlobObservation]):
     """Find files by glob pattern in sandbox."""
-    name = "daytona_glob"
+    name = "glob"
 
     @classmethod
     def create(cls, conv_state, *, sandbox: Sandbox) -> Sequence[ToolDefinition]:
         executor = GlobExecutor(sandbox)
         return [cls(
             description=TOOL_DESCRIPTION,
-            action_type=DaytonaGlobAction,
-            observation_type=DaytonaGlobObservation,
+            action_type=GlobAction,
+            observation_type=GlobObservation,
             executor=executor,
         )]

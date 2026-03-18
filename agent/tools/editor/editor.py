@@ -25,7 +25,7 @@ def _maybe_truncate(text: str, max_len: int = MAX_RESPONSE_LEN_CHAR) -> str:
     return text[:max_len] + f"\n{TEXT_FILE_CONTENT_TRUNCATED_NOTICE}"
 
 
-class DaytonaFileEditor:
+class FileEditor:
 
     def __init__(self, sandbox: Sandbox, max_history: int = 10, file_edits: list | None = None):
         self.sandbox = sandbox

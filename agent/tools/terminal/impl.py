@@ -1,7 +1,7 @@
 # pyright: basic
 # type: ignore
 
-"""Daytona terminal executor — business logic for command execution."""
+"""Terminal executor — business logic for command execution."""
 
 import logging
 import re
@@ -17,15 +17,15 @@ from tools.terminal.constants import (
     TIMEOUT_MESSAGE,
 )
 from tools.terminal.definition import (
-    DaytonaTerminalAction,
-    DaytonaTerminalObservation,
+    TerminalAction,
+    TerminalObservation,
 )
 
 logger = logging.getLogger("agent-api")
 
 
-class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTerminalObservation]):
-    """Executor for the Daytona terminal tool.
+class TerminalExecutor(ToolExecutor[TerminalAction, TerminalObservation]):
+    """Executor for the terminal tool.
 
     Tracks working directory and environment variables across calls so that
     consecutive sandbox.process.exec() calls behave like a persistent session.
@@ -40,13 +40,13 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
 
     def __call__(
         self,
-        action: DaytonaTerminalAction,
+        action: TerminalAction,
         conversation=None,
-    ) -> DaytonaTerminalObservation:
+    ) -> TerminalObservation:
         """Execute the terminal action."""
         # Validate: reset + is_input are mutually exclusive
         if action.reset and action.is_input:
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=action.command,
                 output="Cannot use reset=true with is_input=true.",
                 exit_code=1,
@@ -59,7 +59,7 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
             reset_result = self._reset()
             if not action.command.strip():
                 return reset_result
-            action = DaytonaTerminalAction(
+            action = TerminalAction(
                 command=action.command,
                 timeout=action.timeout,
                 is_input=False,
@@ -80,12 +80,12 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
 
     # ── Reset ─────────────────────────────────────────────────────────────
 
-    def _reset(self) -> DaytonaTerminalObservation:
+    def _reset(self) -> TerminalObservation:
         """Reset tracked state to defaults."""
         self._cwd = DEFAULT_CWD
         self._env_vars = {}
         logger.info("Terminal state reset: cwd and env vars cleared")
-        return DaytonaTerminalObservation(
+        return TerminalObservation(
             command="[RESET]",
             output=(
                 "Terminal state has been reset. All previous environment "
@@ -97,14 +97,14 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
 
     # ── is_input handling ─────────────────────────────────────────────────
 
-    def _handle_is_input(self, action: DaytonaTerminalAction) -> DaytonaTerminalObservation:
+    def _handle_is_input(self, action: TerminalAction) -> TerminalObservation:
         """Handle is_input: send stdin/signals to a running process."""
         command = action.command.strip()
 
         if _is_special_key(command):
             return self._send_special_key(command)
 
-        return DaytonaTerminalObservation(
+        return TerminalObservation(
             command=command,
             output=(
                 "Sending stdin input to a running process is not supported in this "
@@ -119,7 +119,7 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
             is_error=True,
         )
 
-    def _send_special_key(self, command: str) -> DaytonaTerminalObservation:
+    def _send_special_key(self, command: str) -> TerminalObservation:
         """Send a special key (C-c, C-z, C-d) as a signal."""
         signal_map = {
             "C-c": ("kill -INT $(pgrep -n -P 1) 2>/dev/null; echo 'Sent SIGINT'", "SIGINT (Ctrl+C)"),
@@ -130,14 +130,14 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
         try:
             result = self.sandbox.process.exec(cmd, timeout=10)
             raw_output = getattr(result, "result", "") or ""
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=command,
                 output=f"[{label} sent to running process]\n{raw_output}".strip(),
                 exit_code=0,
                 working_dir=self._cwd,
             )
         except Exception as e:
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=command,
                 output=f"Failed to send {label}: {e}",
                 exit_code=1,
@@ -147,13 +147,13 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
 
     # ── Normal command execution ──────────────────────────────────────────
 
-    def _execute_command(self, action: DaytonaTerminalAction) -> DaytonaTerminalObservation:
+    def _execute_command(self, action: TerminalAction) -> TerminalObservation:
         """Execute a normal bash command in the sandbox."""
         cwd = action.working_dir or self._cwd
         user_cmd = action.command.strip()
 
         if not user_cmd:
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command="",
                 output="No command provided.",
                 exit_code=1,
@@ -188,7 +188,7 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
 
             self._cwd = new_cwd
 
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=user_cmd,
                 output=output,
                 exit_code=exit_code,
@@ -197,7 +197,7 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
             )
         except TimeoutError:
             logger.warning(f"Command timed out after {action.timeout}s: {user_cmd[:100]}")
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=user_cmd,
                 output=f"Command timed out after {action.timeout} seconds.\n{TIMEOUT_MESSAGE}",
                 exit_code=-1,
@@ -206,7 +206,7 @@ class DaytonaTerminalExecutor(ToolExecutor[DaytonaTerminalAction, DaytonaTermina
             )
         except Exception as e:
             logger.exception("Terminal exec error")
-            return DaytonaTerminalObservation(
+            return TerminalObservation(
                 command=user_cmd,
                 output=str(e),
                 exit_code=1,

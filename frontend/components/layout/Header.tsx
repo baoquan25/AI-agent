@@ -1,5 +1,7 @@
 'use client';
 
+import { VscLayoutSidebarLeft, VscLayoutPanel, VscLayoutSidebarRight } from '../../lib/icons';
+
 type HeaderProps = {
   leftBarVisible: boolean;
   onToggleLeftBar: () => void;
@@ -28,7 +30,7 @@ export function Header({
           title="Bật/tắt Left Bar (Files)"
           aria-label="Bật/tắt Left Bar"
         >
-          <span className="codicon codicon-layout-sidebar-left" />
+          <VscLayoutSidebarLeft size={14} />
         </button>
         <button
           type="button"
@@ -37,7 +39,7 @@ export function Header({
           title="Bật/tắt panel Output / Terminal"
           aria-label="Bật/tắt panel Output"
         >
-          <span className="codicon codicon-layout-panel" />
+          <VscLayoutPanel size={14} />
         </button>
         <button
           type="button"
@@ -46,7 +48,7 @@ export function Header({
           title="Bật/tắt panel Chat (Agent)"
           aria-label="Bật/tắt panel Chat"
         >
-          <span className="codicon codicon-layout-sidebar-right" />
+          <VscLayoutSidebarRight size={14} />
         </button>
       </div>
     </header>

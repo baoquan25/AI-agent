@@ -1,8 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""Daytona terminal tool — Action, Observation, and ToolDefinition schemas."""
-
 from collections.abc import Sequence
 from typing import Optional
 
@@ -23,9 +18,7 @@ from tools.terminal.constants import (
 # ── Action ────────────────────────────────────────────────────────────────────
 
 
-class DaytonaTerminalAction(Action):
-    """Schema for bash command execution in the Daytona sandbox."""
-
+class TerminalAction(Action):
     command: str = Field(
         default="",
         description=(
@@ -74,8 +67,8 @@ class DaytonaTerminalAction(Action):
 # ── Observation ───────────────────────────────────────────────────────────────
 
 
-class DaytonaTerminalObservation(Observation):
-    """Result from a terminal command execution in the Daytona sandbox."""
+class TerminalObservation(Observation):
+    """Result from a terminal command execution in the sandbox."""
 
     command: str = ""
     output: str = ""
@@ -142,10 +135,10 @@ TOOL_DESCRIPTION = """Execute a bash command in the terminal within a persistent
 # ── ToolDefinition ────────────────────────────────────────────────────────────
 
 
-class DaytonaTerminalTool(ToolDefinition[DaytonaTerminalAction, DaytonaTerminalObservation]):
-    """A ToolDefinition subclass that initializes a DaytonaTerminalExecutor."""
+class TerminalTool(ToolDefinition[TerminalAction, TerminalObservation]):
+    """ToolDefinition that initializes TerminalExecutor."""
 
-    name = "daytona_terminal"
+    name = "terminal"
 
     @classmethod
     def create(
@@ -154,22 +147,22 @@ class DaytonaTerminalTool(ToolDefinition[DaytonaTerminalAction, DaytonaTerminalO
         *,
         sandbox: Sandbox,
         executor: ToolExecutor | None = None,
-    ) -> Sequence["DaytonaTerminalTool"]:
-        """Initialize DaytonaTerminalTool with executor parameters.
+    ) -> Sequence["TerminalTool"]:
+        """Initialize TerminalTool with executor parameters.
 
         Args:
             conv_state: Conversation state (used by the SDK framework).
-            sandbox: Daytona Sandbox instance for remote command execution.
+            sandbox: Sandbox instance for remote command execution.
             executor: Optional pre-built executor (for testing).
         """
         if executor is None:
-            from tools.terminal.impl import DaytonaTerminalExecutor
-            executor = DaytonaTerminalExecutor(sandbox=sandbox)
+            from tools.terminal.impl import TerminalExecutor
+            executor = TerminalExecutor(sandbox=sandbox)
 
         return [
             cls(
-                action_type=DaytonaTerminalAction,
-                observation_type=DaytonaTerminalObservation,
+                action_type=TerminalAction,
+                observation_type=TerminalObservation,
                 description=TOOL_DESCRIPTION,
                 executor=executor,
             )

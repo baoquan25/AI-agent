@@ -4,11 +4,11 @@ from openhands.sdk.tool import register_tool
 from daytona import Sandbox
 
 from tools.run import RunFileTool
-from tools.editor import DaytonaFileEditorTool as FileEditorTool
+from tools.editor import FileEditorTool
 from tools.apply_patch import ApplyPatchTool
 from tools.grep import GrepTool
 from tools.glob import GlobTool
-from tools.terminal import DaytonaTerminalTool as TerminalTool
+from tools.terminal import TerminalTool
 from tools.browser_use import BrowserToolSet
 
 ALL_TOOLS = [

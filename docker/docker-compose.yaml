@@ -5,6 +5,8 @@ services:
     ports:
       - 3000:3000
     environment:
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       # Default to slim image for faster startup
       - DEFAULT_SNAPSHOT=daytonaio/sandbox:0.5.0-slim
       - ENCRYPTION_KEY=supersecretkey
@@ -39,6 +41,7 @@ services:
       - INTERNAL_REGISTRY_ADMIN=admin
       - INTERNAL_REGISTRY_PASSWORD=password
       - INTERNAL_REGISTRY_PROJECT_ID=daytona
+      - SMTP_HOST=maildev
       - SMTP_PORT=1025
       - SMTP_USER=
       - SMTP_PASSWORD=
@@ -88,6 +91,7 @@ services:
       - RUNNER_START_SCORE_THRESHOLD=3
       - SKIP_USER_EMAIL_VERIFICATION=true
       - RUN_MIGRATIONS=true
+      - OTEL_COLLECTOR_API_KEY=otel_collector_api_key
       - HEALTH_CHECK_API_KEY=supersecretkey
     networks:
       - daytona-network
@@ -246,6 +250,13 @@ services:
     ports:
       - 6000:6000
 
+  maildev:
+    image: maildev/maildev
+    networks:
+      - daytona-network
+    ports:
+      - 1080:1080
+
   minio:
     image: minio/minio:latest
     environment:
@@ -259,6 +270,20 @@ services:
       - daytona-network
     ports:
       - 9001:9001
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.67.0
+    networks:
+      - daytona-network
+    ports:
+      - 16686:16686
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.138.0
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    networks:
+      - daytona-network
 
 volumes:
   registry: {}

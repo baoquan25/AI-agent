@@ -1,6 +1,7 @@
 'use client';
 
 import type { TabItem } from '../../lib/types';
+import { getFileIcon, VscClose } from '../../lib/icons';
 
 type EditorTabsProps = {
   openTabs: TabItem[];
@@ -16,7 +17,7 @@ export function EditorTabs({ openTabs, currentFilePath, fileCache, onSwitchTab, 
       {openTabs.map((tab) => {
         const cached = fileCache[tab.path];
         const isModified = cached?.modified;
-        const isPy = tab.name.toLowerCase().endsWith('.py');
+        const { Icon: FileIcon, color: fileIconColor } = getFileIcon(tab.name);
         return (
           <div
             key={tab.path}
@@ -30,7 +31,9 @@ export function EditorTabs({ openTabs, currentFilePath, fileCache, onSwitchTab, 
               }
             }}
           >
-            <span className={`codicon ${isPy ? 'codicon-python' : 'codicon-file'}`} style={{ fontSize: 12, flexShrink: 0 }} />
+            <span style={{ flexShrink: 0, color: fileIconColor, display: 'inline-flex' }}>
+              <FileIcon size={12} />
+            </span>
             <span className="tab-name">{tab.name}</span>
             <span
               className="tab-close"
@@ -38,7 +41,7 @@ export function EditorTabs({ openTabs, currentFilePath, fileCache, onSwitchTab, 
               title={isModified ? 'Chưa lưu (trỏ vào để đóng)' : undefined}
             >
               {isModified && <span className="tab-unsaved-dot">●</span>}
-              <span className="codicon codicon-close" />
+              <span className="tab-close-icon"><VscClose size={14} /></span>
             </span>
           </div>
         );

@@ -216,7 +216,6 @@ export function useFileTree(
         const data = await fsApi.createFile(path, '');
         if (data.success) {
           addTab(path, name);
-          scheduleRefreshFolderList(parentPath);
           setOutputHtml(`<span class="output-success">Created: ${path}</span>`);
         } else {
           setFileTreeData((prev) => removeNodeFromTree(prev, path));
@@ -238,7 +237,6 @@ export function useFileTree(
       try {
         const data = await fsApi.createFolder(path);
         if (data.success) {
-          scheduleRefreshFolderList(parentPath);
           setOutputHtml(`<span class="output-success">Folder: ${path}</span>`);
         } else {
           setFileTreeData((prev) => removeNodeFromTree(prev, path));

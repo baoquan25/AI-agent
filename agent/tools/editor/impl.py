@@ -1,22 +1,22 @@
 # pyright: basic
 # type: ignore
 
-"""Executor that bridges the OpenHands ToolExecutor interface with DaytonaFileEditor."""
+"""Executor that bridges the OpenHands ToolExecutor interface with FileEditor."""
 
 from openhands.sdk.tool import ToolExecutor
 
 from daytona import Sandbox
 
 from .definition import FileEditorAction, FileEditorObservation
-from .editor import DaytonaFileEditor
+from .editor import FileEditor
 from .exceptions import ToolError
 
 
-class DaytonaFileEditorExecutor(ToolExecutor[FileEditorAction, FileEditorObservation]):
-    """Wraps DaytonaFileEditor as an OpenHands ToolExecutor."""
+class FileEditorExecutor(ToolExecutor[FileEditorAction, FileEditorObservation]):
+    """Wraps FileEditor as an OpenHands ToolExecutor."""
 
     def __init__(self, sandbox: Sandbox, file_edits: list | None = None):
-        self.editor = DaytonaFileEditor(sandbox, file_edits=file_edits)
+        self.editor = FileEditor(sandbox, file_edits=file_edits)
 
     def __call__(
         self,

@@ -1,11 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-RunFileTool — Run an existing file via POST /run API.
-Mimics the "Run" button click in the UI.
-"""
-
 import logging
 import posixpath
 from collections.abc import Sequence
@@ -201,8 +193,7 @@ class RunFileExecutor(ToolExecutor[RunFileAction, RunFileObservation]):
 
 
 class RunFileTool(ToolDefinition[RunFileAction, RunFileObservation]):
-    """Run existing file via /run API (same as Run button)."""
-    name = "daytona_run_file"
+    name = "run_file"
 
     @classmethod
     def create(cls, conv_state, *, sandbox: Sandbox, execution_log: list | None = None) -> Sequence[ToolDefinition]:

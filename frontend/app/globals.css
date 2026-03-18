@@ -1,11 +1,3 @@
-@import '@vscode/codicons/dist/codicon.css';
-
-@font-face {
-  font-family: 'codicon';
-  font-display: block;
-  src: url('/codicon.ttf') format('truetype');
-}
-
 /* ─── Reset & Variables ──────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -118,39 +110,6 @@ header {
 }
 .header-btn:hover   { color: var(--text); }
 .header-btn.active  { color: var(--text); }
-.header-btn .codicon { font-size: 14px; }
-
-/* ─── Codicon sizes ───────────────────────────────────────────────── */
-.icon-btn .codicon      { font-size: 16px; }
-.tree-lead-icon.codicon { font-size: 12px; line-height: 1; }
-.tree-item-icon.codicon { font-size: 12px; line-height: 1; }
-/* Giữ icon tree không đổi kích thước khi click/selected/focus */
-.tree-item .tree-lead-icon.codicon,
-.tree-item .tree-item-icon.codicon,
-.tree-item:hover .tree-lead-icon.codicon,
-.tree-item:hover .tree-item-icon.codicon,
-.tree-item.selected .tree-lead-icon.codicon,
-.tree-item.selected .tree-item-icon.codicon,
-.tree-item:focus .tree-lead-icon.codicon,
-.tree-item:active .tree-lead-icon.codicon {
-  font-size: 12px !important;
-}
-.editor-tab .tab-close .codicon { font-size: 14px; }
-
-.codicon-python {
-  color: var(--python-icon) !important;
-  font-size: 14px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.tree-lead-icon.codicon-python,
-.tree-item-icon.codicon-python {
-  font-size: 10px !important;
-  transform: translateY(1px);
-}
-
 /* ─── Layout ─────────────────────────────────────────────────────── */
 .container {
   flex: 1;
@@ -214,7 +173,6 @@ header {
   align-items: center;
   justify-content: center;
 }
-.leftbar-tab .codicon      { font-size: 14px; }
 .leftbar-tab:hover         { color: var(--text); background: rgba(255,255,255,0.06); }
 .leftbar-tab.active        { color: var(--text); background: rgba(255,255,255,0.08); }
 
@@ -273,7 +231,6 @@ header {
   display: flex;
   align-items: center;
 }
-.leftbar-search-item .codicon { color: var(--accent); }
 .leftbar-search-item:hover { background: rgba(255,255,255,0.06); }
 
 /* ─── File Tree ──────────────────────────────────────────────────── */
@@ -317,7 +274,6 @@ header {
   color: var(--muted);
   border-radius: 2px;
 }
-.file-tree-actions .icon-btn .codicon { font-size: 16px; }
 .file-tree-actions .icon-btn:hover {
   color: var(--text);
   background: rgba(255,255,255,0.06);
@@ -495,9 +451,9 @@ header {
   line-height: 1;
   pointer-events: none;
 }
-.editor-tab .tab-close:has(.tab-unsaved-dot) .codicon-close { opacity: 0; }
+.editor-tab .tab-close:has(.tab-unsaved-dot) .tab-close-icon { opacity: 0; }
 .editor-tab .tab-close:has(.tab-unsaved-dot):hover .tab-unsaved-dot { opacity: 0; }
-.editor-tab .tab-close:has(.tab-unsaved-dot):hover .codicon-close { opacity: 1; }
+.editor-tab .tab-close:has(.tab-unsaved-dot):hover .tab-close-icon { opacity: 1; }
 .editor-tab:hover .tab-close,
 .editor-tab.active .tab-close   { opacity: 0.7; }
 .editor-tab .tab-close:hover    { opacity: 1; background: rgba(255,255,255,0.12); }
@@ -570,7 +526,6 @@ header {
   color: inherit;
   cursor: pointer;
 }
-.rightbar-tab-close .codicon { font-size: 12px; }
 .rightbar-tab-add {
   width: 22px;
   height: 22px;
@@ -590,7 +545,6 @@ header {
   color: var(--text);
   background: rgba(255,255,255,0.06);
 }
-.rightbar-tab-add .codicon { font-size: 14px; }
 
 .rightbar-session {
   flex: 1;
@@ -695,8 +649,6 @@ header {
   color: var(--text);
   background: rgba(255,255,255,0.08);
 }
-.output-panel-close .codicon { font-size: 14px; }
-
 /* ─── Panel Scroll (shared by Output + Terminal) ──────────────────── */
 .panel-scroll {
   flex: 1;
@@ -889,7 +841,6 @@ body.is-resizing-editor .monaco-editor-wrapper * {
   padding: 4px 0;
 }
 .chat-ai-text.thinking { color: var(--muted); font-style: italic; }
-.chat-ai-text .codicon-error { color: var(--error, #c00); }
 
 .chat-input-area {
   flex-shrink: 0;
@@ -933,7 +884,6 @@ body.is-resizing-editor .monaco-editor-wrapper * {
   cursor: pointer;
   transition: opacity 0.15s;
 }
-.chat-stop-btn .codicon { font-size: 22px; }
 .chat-stop-btn:hover { opacity: 0.9; }
 
 /* ─── Buttons ────────────────────────────────────────────────────── */
@@ -964,7 +914,6 @@ body.is-resizing-editor .monaco-editor-wrapper * {
   cursor: pointer;
   height: 24px;
 }
-.btn-run .codicon  { font-size: 16px; }
 .btn-run:hover     { color: var(--text); background: rgba(255,255,255,0.05); }
 .btn-run:disabled  { opacity: 0.6; cursor: not-allowed; }
 
@@ -1073,7 +1022,6 @@ body.is-resizing-editor .monaco-editor-wrapper * {
 }
 .diff-nav-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
 .diff-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.diff-nav-btn .codicon { font-size: 14px; }
 
 .diff-review-actions {
   display: flex;
@@ -1095,7 +1043,6 @@ body.is-resizing-editor .monaco-editor-wrapper * {
   transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
-.diff-btn .codicon { font-size: 12px; }
 
 .diff-btn-accept {
   background: rgba(46, 160, 67, 0.15);

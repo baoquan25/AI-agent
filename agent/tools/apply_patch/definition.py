@@ -161,7 +161,7 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
 
 class ApplyPatchTool(ToolDefinition[ApplyPatchAction, ApplyPatchObservation]):
     """Apply unified text patches to files in the sandbox."""
-    name = "daytona_apply_patch"
+    name = "apply_patch"
 
     @classmethod
     def create(cls, conv_state, *, sandbox: Sandbox, file_edits: list | None = None) -> Sequence[ToolDefinition]:

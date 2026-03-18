@@ -1,8 +1,6 @@
 import asyncio
-import json
 import logging
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -10,24 +8,15 @@ from pydantic import BaseModel
 
 from dependencies import get_sandbox, WORKSPACE
 from services.llm import run_agent
-
-
-def _strip_workspace(path: str) -> str:
-    prefix = WORKSPACE.rstrip("/") + "/"
-    if path.startswith(prefix):
-        return path[len(prefix):]
-    return path
+from services.conversation import (
+    _SENTINEL,
+    now_iso, ensure_uuid, sse, strip_workspace,
+    get_thread, create_thread, delete_thread,
+)
 
 logger = logging.getLogger("agent-api")
 
 router = APIRouter(prefix="/conversation", tags=["Conversation"])
-
-_threads: dict[str, dict] = {}
-_SENTINEL = object()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _user_id(request: Request) -> str:
@@ -38,10 +27,6 @@ def _user_id(request: Request) -> str:
     )
 
 
-def _sse(event: str, data) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
 # ── POST /conversation/threads ───────────────────────────────────────────────
 
 class ThreadCreateBody(BaseModel):
@@ -50,39 +35,20 @@ class ThreadCreateBody(BaseModel):
     if_exists: str | None = None
 
 
-def _ensure_uuid(value: str | None) -> str:
-    """Return value if valid UUID string, else generate a new one."""
-    if value:
-        try:
-            uuid.UUID(value)
-            return value
-        except ValueError:
-            pass
-    return str(uuid.uuid4())
-
-
 @router.post("/threads")
-async def create_thread(body: ThreadCreateBody = ThreadCreateBody()):
-    thread_id = _ensure_uuid(body.thread_id)
-    if thread_id in _threads and body.if_exists != "raise":
-        return _threads[thread_id]
-    thread = {
-        "thread_id": thread_id,
-        "created_at": _now_iso(),
-        "updated_at": _now_iso(),
-        "metadata": body.metadata,
-        "status": "idle",
-        "values": {"messages": []},
-    }
-    _threads[thread_id] = thread
-    return thread
+async def create_thread_endpoint(body: ThreadCreateBody = ThreadCreateBody()):
+    thread_id = ensure_uuid(body.thread_id)
+    existing = get_thread(thread_id)
+    if existing and body.if_exists != "raise":
+        return existing
+    return create_thread(thread_id, body.metadata)
 
 
 # ── GET /conversation/threads/{id}/state ────────────────────────────────────
 
 @router.get("/threads/{thread_id}/state")
 async def get_thread_state(thread_id: str):
-    thread = _threads.get(thread_id)
+    thread = get_thread(thread_id)
     if not thread:
         return {"values": {"messages": []}, "next": [], "checkpoint": None}
     has_messages = bool(thread["values"].get("messages"))
@@ -98,7 +64,7 @@ async def get_thread_state(thread_id: str):
 
 @router.post("/threads/{thread_id}/history")
 async def get_thread_history(thread_id: str):
-    thread = _threads.get(thread_id)
+    thread = get_thread(thread_id)
     if not thread or not thread["values"].get("messages"):
         return []
     return [{"values": thread["values"], "next": [], "checkpoint": {"thread_id": thread_id}, "tasks": []}]
@@ -124,23 +90,15 @@ async def run_stream(thread_id: str, request: Request):
     if sandbox is None:
         raise HTTPException(404, f"No sandbox found for user '{user_id}'. Please create a sandbox first.")
 
-    # ensure workspace folder exists
     try:
         sandbox.fs.create_folder(WORKSPACE, "755")
     except Exception:
         pass
 
-    if thread_id not in _threads:
-        _threads[thread_id] = {
-            "thread_id": thread_id,
-            "created_at": _now_iso(),
-            "updated_at": _now_iso(),
-            "metadata": {},
-            "status": "idle",
-            "values": {"messages": []},
-        }
+    thread = get_thread(thread_id)
+    if thread is None:
+        thread = create_thread(thread_id, {})
 
-    thread = _threads[thread_id]
     thread["values"]["messages"].append({
         "type": "human",
         "content": human_text,
@@ -151,7 +109,7 @@ async def run_stream(thread_id: str, request: Request):
     file_edits: list[dict] = []
 
     async def event_stream():
-        yield _sse("metadata", {"run_id": str(uuid.uuid4())})
+        yield sse("metadata", {"run_id": str(uuid.uuid4())})
 
         loop = asyncio.get_event_loop()
         token_queue: asyncio.Queue = asyncio.Queue()
@@ -181,7 +139,7 @@ async def run_stream(thread_id: str, request: Request):
             if item.get("type") == "content":
                 token_text = item["content"]
                 accumulated += token_text
-                yield _sse("messages", [
+                yield sse("messages", [
                     {"type": "ai", "content": token_text, "id": ai_msg_id},
                     {},
                 ])
@@ -192,7 +150,7 @@ async def run_stream(thread_id: str, request: Request):
 
         ai_msg = {"type": "ai", "content": accumulated, "id": ai_msg_id}
         thread["values"]["messages"].append(ai_msg)
-        thread["updated_at"] = _now_iso()
+        thread["updated_at"] = now_iso()
 
         if execution_log:
             thread["values"]["code_outputs"] = execution_log
@@ -201,14 +159,14 @@ async def run_stream(thread_id: str, request: Request):
 
         if file_edits:
             thread["values"]["file_edits"] = [
-                {**e, "path": _strip_workspace(e["path"])} for e in file_edits
+                {**e, "path": strip_workspace(e["path"])} for e in file_edits
             ]
             thread["values"]["_file_edits_id"] = uuid.uuid4().hex[:12]
         else:
             thread["values"].pop("file_edits", None)
             thread["values"].pop("_file_edits_id", None)
 
-        yield _sse("values", thread["values"])
+        yield sse("values", thread["values"])
         yield "event: end\ndata: \"\"\n\n"
 
     return StreamingResponse(
@@ -221,6 +179,6 @@ async def run_stream(thread_id: str, request: Request):
 # ── DELETE /conversation/threads/{id} ───────────────────────────────────────
 
 @router.delete("/threads/{thread_id}")
-async def delete_thread(thread_id: str):
-    _threads.pop(thread_id, None)
+async def delete_thread_endpoint(thread_id: str):
+    delete_thread(thread_id)
     return {"status": "ok"}

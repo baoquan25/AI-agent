@@ -2,6 +2,7 @@
 
 import type { ChatMessage } from '../../lib/types';
 import type { ChatSession } from '../../hooks/useChat';
+import { VscClose, VscAdd } from '../../lib/icons';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 
@@ -70,7 +71,7 @@ export function RightBar(props: RightBarProps) {
                 title="Đóng conversation"
                 aria-label="Đóng conversation"
               >
-                <span className="codicon codicon-close" />
+                <VscClose size={12} />
               </button>
             </div>
           ))}
@@ -82,7 +83,7 @@ export function RightBar(props: RightBarProps) {
           title="Tạo conversation mới"
           aria-label="Tạo conversation mới"
         >
-          <span className="codicon codicon-add" />
+          <VscAdd size={14} />
         </button>
       </div>
 

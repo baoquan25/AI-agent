@@ -3,17 +3,17 @@
 
 # Core tool interface
 from tools.terminal.definition import (
-    DaytonaTerminalAction,
-    DaytonaTerminalObservation,
-    DaytonaTerminalTool,
+    TerminalAction,
+    TerminalObservation,
+    TerminalTool,
 )
-from tools.terminal.impl import DaytonaTerminalExecutor
+from tools.terminal.impl import TerminalExecutor
 
 
 __all__ = [
     # === Core Tool Interface ===
-    "DaytonaTerminalTool",
-    "DaytonaTerminalAction",
-    "DaytonaTerminalObservation",
-    "DaytonaTerminalExecutor",
+    "TerminalTool",
+    "TerminalAction",
+    "TerminalObservation",
+    "TerminalExecutor",
 ]

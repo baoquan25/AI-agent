@@ -1,20 +1,13 @@
 from pathlib import Path
 
 from openhands.sdk import AgentContext
-from openhands.sdk.context import Skill
+from openhands.sdk.plugin import Plugin
 
 _agent_dir = Path(__file__).resolve().parent.parent
-_skills_dir = _agent_dir / "skills"
+_plugins_dir = _agent_dir / "plugins"
 
-_skill_files = [
-    "debugging.md",
-    "navigation.md",
-    "security.md",
-    "test.md",
-]
-_skills = [Skill.load(_skills_dir / f) for f in _skill_files]
+plugin = Plugin.load(_plugins_dir)
 
 agent_context = AgentContext(
-    skills=_skills,
-    load_public_skills=True,
+    skills=plugin.get_all_skills(),
 )

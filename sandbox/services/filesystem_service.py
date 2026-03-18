@@ -95,14 +95,12 @@ class FilesystemService:
         """List files/dirs via sandbox.fs.list_files (doc: List files and directories)."""
         try:
             t0 = time.monotonic()
-            await self.wm.initialize(sandbox)
-            t1 = time.monotonic()
             sdk_path = _workspace_path(path)
             files = await asyncio.to_thread(sandbox.fs.list_files, sdk_path)
-            t2 = time.monotonic()
+            t1 = time.monotonic()
             logger.info(
-                "list_files(%s) init=%.0fms sdk=%.0fms total=%.0fms",
-                path, (t1-t0)*1000, (t2-t1)*1000, (t2-t0)*1000,
+                "list_files(%s) sdk=%.0fms",
+                path, (t1-t0)*1000,
             )
             return [
                 {
@@ -177,13 +175,11 @@ class FilesystemService:
             if not path or not path.strip("/"):
                 return {"success": False, "error": "read_file: path must not be empty"}
             t0 = time.monotonic()
-            await self.wm.initialize(sandbox)
-            t1 = time.monotonic()
             raw = await asyncio.to_thread(sandbox.fs.download_file, _workspace_path(path))
-            t2 = time.monotonic()
+            t1 = time.monotonic()
             logger.info(
-                "read_file(%s) init=%.0fms sdk=%.0fms total=%.0fms",
-                path, (t1-t0)*1000, (t2-t1)*1000, (t2-t0)*1000,
+                "read_file(%s) sdk=%.0fms",
+                path, (t1-t0)*1000,
             )
 
             # Avoid decoding binary or non-UTF-8 as UTF-8 (crashes / mojibake).
@@ -247,23 +243,25 @@ class FilesystemService:
         if not dir_parts:
             return True
 
-        # Find the deepest parent that's already cached (known to exist).
-        # Only create directories from that point downward, skipping SDK calls
-        # for levels we already know exist.
+        deepest = "/".join(dir_parts)
+
+        # Fast path: deepest parent already cached → nothing to do.
         sid = getattr(sandbox, "id", None)
-        start_from = 0
         if sid:
             async with self._dirs_lock:
                 known = self._created_dirs.get(sid, set())
-                for i in range(len(dir_parts), 0, -1):
-                    candidate = "/".join(dir_parts[:i])
-                    if candidate in known:
-                        start_from = i
-                        break
+                if deepest in known:
+                    return True
 
-        for i in range(start_from + 1, len(dir_parts) + 1):
-            dir_path = "/".join(dir_parts[:i])
-            await self._create_dir_if_needed(dir_path, sandbox)
+        # SDK create_folder uses MkdirAll — one call creates the full chain.
+        await self._create_dir_if_needed(deepest, sandbox)
+
+        # Cache all intermediate levels so future sibling files skip SDK calls.
+        if sid:
+            async with self._dirs_lock:
+                dirs = self._created_dirs.setdefault(sid, set())
+                for i in range(1, len(dir_parts) + 1):
+                    dirs.add("/".join(dir_parts[:i]))
         return True
 
     async def write_file(self, path: str, content: str, sandbox) -> bool:
@@ -277,14 +275,7 @@ class FilesystemService:
             t1 = time.monotonic()
             sdk_path = _workspace_path(path)
             data = content.encode("utf-8")
-            try:
-                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
-            except Exception:
-                self.wm.invalidate(sandbox)
-                await self._reset_dir_cache(sandbox)
-                if not await self._ensure_workspace_and_parents(path, sandbox):
-                    return False
-                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
+            await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             t2 = time.monotonic()
             logger.info(
                 "write_file(%s) parents=%.0fms upload=%.0fms total=%.0fms",
@@ -309,14 +300,7 @@ class FilesystemService:
                     content = "# Markdown Document\n\nCreated by Daytona Editor\n"
             sdk_path = _workspace_path(path)
             data = content.encode("utf-8")
-            try:
-                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
-            except Exception:
-                self.wm.invalidate(sandbox)
-                await self._reset_dir_cache(sandbox)
-                if not await self._ensure_workspace_and_parents(path, sandbox):
-                    return False
-                await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
+            await asyncio.to_thread(sandbox.fs.upload_file, data, sdk_path)
             return True
         except Exception as e:
             logger.error(f"create_file failed at {path}: {e}")

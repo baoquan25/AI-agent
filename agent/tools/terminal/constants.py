@@ -1,15 +1,15 @@
 # pyright: basic
 # type: ignore
 
-"""Constants for the Daytona terminal tool."""
+"""Constants for the terminal tool."""
 
 MAX_OUTPUT_CHARS: int = 80_000
 
 DEFAULT_TIMEOUT: int = 30
 
-DEFAULT_CWD: str = "/home/daytona/workspace"
+DEFAULT_CWD: str = "/workspace"
 
-CWD_SENTINEL: str = "__DAYTONA_CWD__"
+CWD_SENTINEL: str = "__CWD__"
 
 TIMEOUT_MESSAGE: str = (
     "You may retry with a higher `timeout` value, "

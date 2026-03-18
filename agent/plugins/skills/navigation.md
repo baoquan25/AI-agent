@@ -1,5 +1,5 @@
 ---
-name: repo-navigation
+name: navigation
 triggers: ["mã nguồn", "kiến trúc", "cấu trúc dự án", "tìm file", "tìm chỗ xử lý", "điểm bắt đầu", "luồng chạy", "xem repo"]
 ---
 

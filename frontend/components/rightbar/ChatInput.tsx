@@ -1,5 +1,7 @@
 'use client';
 
+import { VscStopCircle } from '../../lib/icons';
+
 type ChatInputProps = {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   loading: boolean;
@@ -25,7 +27,7 @@ export function ChatInput({ inputRef, loading, onSend, onStop }: ChatInputProps)
       />
       {loading && (
         <button type="button" className="chat-stop-btn" onClick={onStop} title="Stop AI" aria-label="Stop AI">
-          <span className="codicon codicon-stop-circle" aria-hidden />
+          <VscStopCircle size={22} aria-hidden />
         </button>
       )}
     </div>

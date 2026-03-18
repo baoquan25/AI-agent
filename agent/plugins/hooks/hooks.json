@@ -1,0 +1,36 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "file_editor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[hook] file_editor used: $OPENHANDS_TOOL_NAME\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[hook] apply_patch used: $OPENHANDS_TOOL_NAME\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "terminal",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[hook] terminal used: $OPENHANDS_TOOL_NAME\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

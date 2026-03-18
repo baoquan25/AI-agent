@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import type { TabItem, FileEdit } from '../../lib/types';
+import { VscPlay } from '../../lib/icons';
 import { EditorTabs } from './EditorTabs';
 import { DiffReview } from './DiffReview';
 
@@ -86,7 +87,7 @@ export function EditorSection(props: EditorSectionProps) {
                   title={runBusy ? 'Running...' : 'Run'}
                 >
                   <div className="spinner" style={{ display: runBusy ? 'inline-block' : 'none' }} />
-                  <span className="codicon codicon-play" />
+                  <VscPlay size={16} />
                 </button>
               </div>
             </div>

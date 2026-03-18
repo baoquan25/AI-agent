@@ -1,5 +1,5 @@
 ---
-name: debugging-playbook
+name: debugging
 triggers: ["gỡ lỗi", "sửa lỗi", "lỗi", "ngoại lệ", "vết lỗi", "dấu vết lỗi", "test lỗi", "chạy lỗi", "không hoạt động"]
 ---
 

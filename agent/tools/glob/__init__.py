@@ -2,13 +2,13 @@
 # type: ignore
 
 from .definition import (
-    DaytonaGlobAction,
-    DaytonaGlobObservation,
+    GlobAction,
+    GlobObservation,
     GlobTool,
 )
 
 __all__ = [
     "GlobTool",
-    "DaytonaGlobAction",
-    "DaytonaGlobObservation",
+    "GlobAction",
+    "GlobObservation",
 ]

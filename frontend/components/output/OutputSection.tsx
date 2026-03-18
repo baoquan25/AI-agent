@@ -1,5 +1,6 @@
 'use client';
 
+import { VscClose } from '../../lib/icons';
 import { OutputPanel } from './OutputPanel';
 import { TerminalPanel } from './TerminalPanel';
 
@@ -44,7 +45,7 @@ export function OutputSection(props: OutputSectionProps) {
           </div>
           {onClosePanel && (
             <button type="button" className="output-panel-close" onClick={onClosePanel} title="Đóng panel (Ctrl+J)" aria-label="Đóng panel">
-              <span className="codicon codicon-close" />
+              <VscClose size={14} />
             </button>
           )}
         </div>

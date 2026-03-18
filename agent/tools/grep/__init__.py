@@ -2,13 +2,13 @@
 # type: ignore
 
 from .definition import (
-    DaytonaGrepAction,
-    DaytonaGrepObservation,
+    GrepAction,
+    GrepObservation,
     GrepTool,
 )
 
 __all__ = [
     "GrepTool",
-    "DaytonaGrepAction",
-    "DaytonaGrepObservation",
+    "GrepAction",
+    "GrepObservation",
 ]

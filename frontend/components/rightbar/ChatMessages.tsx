@@ -1,6 +1,7 @@
 'use client';
 
 import type { ChatMessage } from '../../lib/types';
+import { VscError } from '../../lib/icons';
 
 type ChatMessagesProps = {
   messages: ChatMessage[];
@@ -19,7 +20,7 @@ export function ChatMessages({ messages, containerRef, onScroll }: ChatMessagesP
         ) : (
           <div key={i} className={`chat-ai-text ${msg.isThinking ? 'thinking' : ''}`}>
             {msg.text}
-            {msg.icon === 'error' && msg.text !== 'No connection' && <span className="codicon codicon-error" style={{ marginLeft: 6 }} />}
+            {msg.icon === 'error' && msg.text !== 'No connection' && <span style={{ marginLeft: 6, color: 'var(--error, #c00)', display: 'inline-flex', verticalAlign: 'middle' }}><VscError size={14} /></span>}
           </div>
         )
       )}

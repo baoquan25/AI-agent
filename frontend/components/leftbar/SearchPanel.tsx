@@ -1,5 +1,7 @@
 'use client';
 
+import { getFileIcon } from '../../lib/icons';
+
 type SearchPanelProps = {
   searchPattern: string;
   onSearchPatternChange: (value: string) => void;
@@ -38,25 +40,27 @@ export function SearchPanel({
         {searchResults.length === 0 ? (
           <div className="leftbar-search-empty">No files found</div>
         ) : (
-          searchResults.map((match) => (
-            <div
-              key={match}
-              className="leftbar-search-item"
-              onClick={() => {
-                if (chatLoading) {
-                  if (openTabs.some((t) => t.path === match)) switchTab(match);
-                  return;
-                }
-                onResultClick(match);
-              }}
-            >
-              <span
-                className={`codicon ${match.toLowerCase().endsWith('.py') ? 'codicon-python' : 'codicon-file'}`}
-                style={{ marginRight: 6, fontSize: 12 }}
-              />
-              {match}
-            </div>
-          ))
+          searchResults.map((match) => {
+            const { Icon: FileIcon, color: fileIconColor } = getFileIcon(match);
+            return (
+              <div
+                key={match}
+                className="leftbar-search-item"
+                onClick={() => {
+                  if (chatLoading) {
+                    if (openTabs.some((t) => t.path === match)) switchTab(match);
+                    return;
+                  }
+                  onResultClick(match);
+                }}
+              >
+                <span style={{ marginRight: 6, color: fileIconColor, display: 'inline-flex', flexShrink: 0 }}>
+                  <FileIcon size={12} />
+                </span>
+                {match}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

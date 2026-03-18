@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { VscFiles, VscSearch } from '../../lib/icons';
 import { FileTree } from './FileTree';
 import { SearchPanel } from './SearchPanel';
 
@@ -103,7 +104,7 @@ export function FileTreeSidebar(props: FileTreeSidebarProps) {
             onClick={() => setLeftBarTab('files')}
             title="Files"
           >
-            <span className="codicon codicon-files" />
+            <VscFiles size={14} />
           </button>
           <button
             type="button"
@@ -113,7 +114,7 @@ export function FileTreeSidebar(props: FileTreeSidebarProps) {
             }}
             title="Search (Ctrl+P)"
           >
-            <span className="codicon codicon-search" />
+            <VscSearch size={14} />
           </button>
         </div>
         {leftBarTab === 'files' && (

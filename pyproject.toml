@@ -24,7 +24,8 @@ dependencies = [
     "wsproto",
     "browser-use==0.12.1",
     "func-timeout",
-    "openai==2.16.0",  
+    "openai==2.16.0",
+    "uv",
 ]
 
 [tool.setuptools.packages.find]

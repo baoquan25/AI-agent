@@ -34,11 +34,11 @@ function renderCodeOutputs(items: CodeOutput[]): string {
       const d = r.data ?? '';
       const lib = r.library ?? '';
       if (type.startsWith('image/'))
-        html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-graph"></span> ${lib || 'Chart'} ${i + 1}</div><img src="data:${type};base64,${d}" alt="Output" /></div>`;
+        html += `<div class="rich-output-item"><div class="rich-output-label">📈 ${lib || 'Chart'} ${i + 1}</div><img src="data:${type};base64,${d}" alt="Output" /></div>`;
       else if (type === 'text/html')
         html += `<div class="rich-output-item"><div class="rich-output-label"> </div><div class="rich-output-html">${d}</div></div>`;
       else if (type === 'image/svg+xml')
-        html += `<div class="rich-output-item"><div class="rich-output-label"><span class="codicon codicon-paintcan"></span> SVG ${i + 1}</div><div style="background:white;padding:10px;">${d}</div></div>`;
+        html += `<div class="rich-output-item"><div class="rich-output-label">🎨 SVG ${i + 1}</div><div style="background:white;padding:10px;">${d}</div></div>`;
     });
   }
   return html || '<span class="output-success">Done</span>';

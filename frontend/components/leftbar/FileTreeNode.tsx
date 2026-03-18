@@ -2,6 +2,7 @@
 
 import type { TreeNode } from '../../lib/types';
 import { formatFileSize } from '../../lib/utils';
+import { getFileIcon, VscChevronDown, VscChevronRight } from '../../lib/icons';
 import { TreeInlineCreate } from './TreeInlineCreate';
 
 type FileTreeNodeProps = {
@@ -67,19 +68,23 @@ export function FileTreeNode(props: FileTreeNodeProps) {
   const isDir = node.type === 'directory';
   const hasChildren = isDir && node.children && node.children.length > 0;
   const shouldExpand = isDir && (expandedFolders.has(path) || (firstLevel && !initialExpandDone));
-  const isPy = node.type === 'file' && node.name.toLowerCase().endsWith('.py');
   const paddingLeft = 8 + level * 8;
 
+  const { Icon: FileIcon, color: fileIconColor } = getFileIcon(node.name);
   const leadIcon = isDir ? (
     shouldExpand ? (
-      <span className="tree-lead-icon codicon codicon-chevron-down" onClick={(e) => { e.stopPropagation(); onToggleFolder(path); }} title="Thu gọn" />
+      <span className="tree-lead-icon" onClick={(e) => { e.stopPropagation(); onToggleFolder(path); }} title="Thu gọn">
+        <VscChevronDown size={12} />
+      </span>
     ) : (
-      <span className="tree-lead-icon codicon codicon-chevron-right" onClick={(e) => { e.stopPropagation(); onToggleFolder(path); }} title="Mở rộng" />
+      <span className="tree-lead-icon" onClick={(e) => { e.stopPropagation(); onToggleFolder(path); }} title="Mở rộng">
+        <VscChevronRight size={12} />
+      </span>
     )
-  ) : isPy ? (
-    <span className="tree-lead-icon codicon codicon-python" />
   ) : (
-    <span className="tree-lead-icon codicon codicon-file" />
+    <span className="tree-lead-icon" style={{ color: fileIconColor }}>
+      <FileIcon size={12} />
+    </span>
   );
 
   if (renameNode?.path === path) {

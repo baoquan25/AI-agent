@@ -1,13 +1,3 @@
-# pyright: basic
-# type: ignore
-
-"""
-DaytonaFileEditorTool — str_replace-style file editor adapted for Daytona sandbox.
-
-Based on OpenHands file_editor (openhands-tools), rewritten to use sandbox.fs I/O
-instead of local filesystem operations.
-"""
-
 from collections.abc import Sequence
 from typing import Literal, Optional
 
@@ -77,15 +67,15 @@ class FileEditorObservation(Observation):
         return [TextContent(text=self.output)]
 
 
-class DaytonaFileEditorTool(ToolDefinition[FileEditorAction, FileEditorObservation]):
-    """str_replace-style file editor for Daytona sandbox."""
-    name = "daytona_file_editor"
+class FileEditorTool(ToolDefinition[FileEditorAction, FileEditorObservation]):
+    """str_replace-style file editor for sandbox."""
+    name = "file_editor"
 
     @classmethod
     def create(cls, conv_state, *, sandbox: Sandbox, file_edits: list | None = None) -> Sequence[ToolDefinition]:
-        from .impl import DaytonaFileEditorExecutor
+        from .impl import FileEditorExecutor
 
-        executor = DaytonaFileEditorExecutor(sandbox, file_edits=file_edits)
+        executor = FileEditorExecutor(sandbox, file_edits=file_edits)
         return [cls(
             description=TOOL_DESCRIPTION,
             action_type=FileEditorAction,

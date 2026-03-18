@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { FileEdit } from '../../lib/types';
+import { VscChevronLeft, VscChevronRight } from '../../lib/icons';
 
 const DiffEditorLazy = dynamic(
   () => import('@monaco-editor/react').then((m) => {
@@ -143,10 +144,10 @@ export function DiffReview({
           {pendingDiffs.length > 1 && (
             <>
               <button type="button" className="diff-nav-btn" onClick={goPrev} disabled={reviewIndex === 0} title="Previous">
-                <span className="codicon codicon-chevron-left" />
+                <VscChevronLeft size={14} />
               </button>
               <button type="button" className="diff-nav-btn" onClick={goNext} disabled={reviewIndex === pendingDiffs.length - 1} title="Next">
-                <span className="codicon codicon-chevron-right" />
+                <VscChevronRight size={14} />
               </button>
             </>
           )}

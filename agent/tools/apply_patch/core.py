@@ -1,14 +1,3 @@
-"""Core logic for applying 'apply_patch' text format (OpenAI GPT-5.1 guide).
-
-This module is an adaptation of the reference implementation from
-https://github.com/openai/openai-cookbook/blob/main/examples/gpt-5/apply_patch.py
-and provides pure functions and data models to parse and apply patches.
-
-Minimal modifications were made to fit within the OpenHands SDK tool ecosystem:
-- Types exposed here are used by the ApplyPatch tool executor
-- File I/O is injected via callables so the executor can enforce workspace safety
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable

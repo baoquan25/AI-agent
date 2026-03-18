@@ -24,16 +24,16 @@ This is like `grep -rn` — it finds which files contain the pattern and shows m
 
 **Parameters:**
 * pattern: Regex or text to search for (e.g. "def calculate", "import os", "TODO")
-* path: Directory to search in (default: /home/daytona/workspace, searches recursively)
+* path: Directory to search in (default: /workspace, searches recursively)
 * include: Optional file filter glob (e.g. "*.py", "*.js")
 
 **Examples:**
 ```
 # Find all files containing "calculate_total"
-pattern="calculate_total", path="/home/daytona/workspace"
+pattern="calculate_total", path="/workspace"
 
 # Find Python files with "import pandas"
-pattern="import pandas", path="/home/daytona/workspace", include="*.py"
+pattern="import pandas", path="/workspace", include="*.py"
 
 # Find class definitions
 pattern="class .*Controller", include="*.py"
@@ -44,10 +44,10 @@ Only the first 100 results are returned.
 """
 
 
-class DaytonaGrepAction(Action):
+class GrepAction(Action):
     pattern: str = Field(description="Regex or text pattern to search for inside files")
     path: str = Field(
-        default="/home/daytona/workspace",
+        default="/workspace",
         description="Absolute directory path to search in (searches recursively)",
     )
     include: Optional[str] = Field(
@@ -56,7 +56,7 @@ class DaytonaGrepAction(Action):
     )
 
 
-class DaytonaGrepObservation(Observation):
+class GrepObservation(Observation):
     matches: list[str] = Field(default_factory=list)
     files: list[str] = Field(default_factory=list)
     count: int = 0
@@ -78,11 +78,11 @@ class DaytonaGrepObservation(Observation):
         )]
 
 
-class GrepExecutor(ToolExecutor[DaytonaGrepAction, DaytonaGrepObservation]):
+class GrepExecutor(ToolExecutor[GrepAction, GrepObservation]):
     def __init__(self, sandbox: Sandbox):
         self.sandbox = sandbox
 
-    def __call__(self, action: DaytonaGrepAction, conversation=None) -> DaytonaGrepObservation:
+    def __call__(self, action: GrepAction, conversation=None) -> GrepObservation:
         try:
             cmd = "grep -rHnE"
 
@@ -108,14 +108,14 @@ class GrepExecutor(ToolExecutor[DaytonaGrepAction, DaytonaGrepObservation]):
                     if file_path:
                         files.add(file_path)
 
-            return DaytonaGrepObservation(
+            return GrepObservation(
                 matches=matches,
                 files=sorted(files),
                 count=len(matches),
                 success=True,
             )
         except Exception as e:
-            return DaytonaGrepObservation(
+            return GrepObservation(
                 matches=[str(e)],
                 files=[],
                 count=0,
@@ -123,16 +123,16 @@ class GrepExecutor(ToolExecutor[DaytonaGrepAction, DaytonaGrepObservation]):
             )
 
 
-class GrepTool(ToolDefinition[DaytonaGrepAction, DaytonaGrepObservation]):
+class GrepTool(ToolDefinition[GrepAction, GrepObservation]):
     """Search file contents by regex in sandbox."""
-    name = "daytona_grep"
+    name = "grep"
 
     @classmethod
     def create(cls, conv_state, *, sandbox: Sandbox) -> Sequence[ToolDefinition]:
         executor = GrepExecutor(sandbox)
         return [cls(
             description=_DESCRIPTION,
-            action_type=DaytonaGrepAction,
-            observation_type=DaytonaGrepObservation,
+            action_type=GrepAction,
+            observation_type=GrepObservation,
             executor=executor,
         )]

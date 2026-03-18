@@ -233,21 +233,6 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
         inject_scripts: list[str] | None = None,
         **config,
     ):
-        """Initialize BrowserToolExecutor with timeout protection.
-
-        Args:
-            headless: Whether to run browser in headless mode
-            allowed_domains: List of allowed domains for browser operations
-            session_timeout_minutes: Browser session timeout in minutes
-            init_timeout_seconds: Timeout for browser initialization in seconds
-            full_output_save_dir: Absolute path to directory to save full output
-                logs and files, used when truncation is needed.
-            inject_scripts: List of JavaScript code strings to inject into every
-                new document. Scripts are injected via CDP's
-                Page.addScriptToEvaluateOnNewDocument and run before page scripts.
-                Useful for injecting recording tools like rrweb.
-            **config: Additional configuration options
-        """
 
         def init_logic():
             nonlocal headless
@@ -259,16 +244,9 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
                 headless = False  # Force headless off if VNC is enabled
                 logger.info("VNC is enabled - running browser in non-headless mode")
 
-            # Configure scripts to inject
             if inject_scripts:
                 self._server.set_inject_scripts(inject_scripts)
 
-            # Chromium refuses to run as root with sandboxing enabled.
-            # Disable the sandbox when running as root so CHROME_DOCKER_ARGS
-            # (--no-sandbox, --disable-setuid-sandbox, etc.) are applied.
-            # SECURITY: Running Chrome as root without a sandbox is risky
-            # - a compromised browser has full root access. Use only in
-            # controlled environments.
             running_as_root = os.getuid() == 0
             if running_as_root:
                 logger.warning(
@@ -276,11 +254,21 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
                     "(required for root). This reduces security isolation."
                 )
 
+            # Extra Chrome args for headless VM environments
+            extra_args = [
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-software-rasterizer",
+            ]
+
             self._config = {
                 "headless": headless,
                 "allowed_domains": allowed_domains or [],
                 "executable_path": executable_path,
                 "chromium_sandbox": not running_as_root,
+                "args": extra_args,
+                "user_data_dir": "~/.config/browseruse/profiles/default-chrome",
                 **config,
             }
 
@@ -384,10 +372,7 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
     async def _ensure_initialized(self):
         """Ensure browser session is initialized."""
         if not self._initialized:
-            # Initialize browser session with our config
             await self._server._init_browser_session(**self._config)
-            # Inject any configured user scripts after session is ready
-            # Note: rrweb scripts are injected lazily when recording starts
             await self._server._inject_scripts_to_session()
             self._initialized = True
 

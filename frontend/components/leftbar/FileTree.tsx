@@ -1,6 +1,7 @@
 'use client';
 
 import type { TreeNode } from '../../lib/types';
+import { VscNewFile, VscNewFolder, VscRefresh, VscSaveAll } from '../../lib/icons';
 import { TreeInlineCreate } from './TreeInlineCreate';
 import { FileTreeNode } from './FileTreeNode';
 
@@ -157,13 +158,13 @@ export function FileTree(props: FileTreeProps) {
         <span className="file-tree-title">WORKSPACE</span>
         <div className="file-tree-actions">
           <button type="button" className="icon-btn" onClick={onToolbarNewFile} title="New File" disabled={chatLoading}>
-            <span className="codicon codicon-new-file" />
+            <VscNewFile size={16} />
           </button>
           <button type="button" className="icon-btn" onClick={onToolbarNewFolder} title="New Folder" disabled={chatLoading}>
-            <span className="codicon codicon-new-folder" />
+            <VscNewFolder size={16} />
           </button>
           <button type="button" className="icon-btn" onClick={onLoadFileTree} title="Refresh" disabled={chatLoading}>
-            <span className="codicon codicon-refresh" />
+            <VscRefresh size={16} />
           </button>
           <button
             type="button"
@@ -172,7 +173,7 @@ export function FileTree(props: FileTreeProps) {
             disabled={chatLoading}
             title={modifiedCount > 0 ? `Save All (${modifiedCount} unsaved)` : 'Save All (Ctrl+S)'}
           >
-            <span className="codicon codicon-save-all" />
+            <VscSaveAll size={16} />
           </button>
         </div>
       </div>

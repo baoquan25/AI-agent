@@ -1,5 +1,7 @@
 'use client';
 
+import { VscListFlat, VscChevronRight } from '../../lib/icons';
+
 type TreeInlineCreateProps = {
   level: number;
   mode: 'file' | 'folder';
@@ -14,7 +16,9 @@ export function TreeInlineCreate({ level, mode, value, onChange, onBlur, onKeyDo
   return (
     <div className="tree-item tree-inline-create-row" style={{ paddingLeft: 8 + level * 8 }}>
       <div className="tree-item-content">
-        <span className={`tree-lead-icon codicon codicon-${mode === 'file' ? 'list-flat' : 'chevron-right'}`} style={{ pointerEvents: 'none' }} />
+        <span className="tree-lead-icon" style={{ pointerEvents: 'none' }}>
+          {mode === 'file' ? <VscListFlat size={12} /> : <VscChevronRight size={12} />}
+        </span>
         <input
           ref={inputRef as React.RefObject<HTMLInputElement>}
           type="text"

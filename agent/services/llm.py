@@ -8,7 +8,7 @@ from openhands.sdk.llm.streaming import ModelResponseStream
 from config import settings
 from dependencies import WORKSPACE
 from tools.registry import create_tools
-from services.agent_context import agent_context
+from services.agent_context import agent_context, plugin
 
 logger = get_logger(__name__)
 PERSISTENCE_DIR = "/tmp/openhands-conversations"
@@ -74,6 +74,7 @@ def run_agent(sandbox, user_id: str, message: str, conversation_id: str | None =
         llm=llm,
         tools=[Tool(name=toolset_name)],
         agent_context=agent_context,
+        # mcp_config tắt tạm thời; bật lại: mcp_config=plugin.mcp_config or {}
     )
 
     resolved_id = uuid.UUID(conversation_id)
@@ -89,6 +90,7 @@ def run_agent(sandbox, user_id: str, message: str, conversation_id: str | None =
         workspace=local_workspace,
         persistence_dir=PERSISTENCE_DIR,
         conversation_id=resolved_id,
+        hook_config=plugin.hooks,
     )
 
     conversation.send_message(message)
