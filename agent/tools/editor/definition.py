@@ -69,10 +69,15 @@ class FileEditorObservation(Observation):
 
 class FileEditorTool(ToolDefinition[FileEditorAction, FileEditorObservation]):
     """str_replace-style file editor for sandbox."""
-    name = "file_editor"
 
     @classmethod
-    def create(cls, conv_state, *, sandbox: Sandbox, file_edits: list | None = None) -> Sequence[ToolDefinition]:
+    def create(cls, conv_state, *, sandbox: Sandbox | None = None, file_edits: list | None = None) -> Sequence[ToolDefinition]:
+        if sandbox is None:
+            sandbox = conv_state.agent_state.get("sandbox")
+        if not sandbox:
+            raise ValueError("sandbox not found in conv_state.agent_state")
+        if file_edits is None:
+            file_edits = conv_state.agent_state.get("file_edits")
         from .impl import FileEditorExecutor
 
         executor = FileEditorExecutor(sandbox, file_edits=file_edits)

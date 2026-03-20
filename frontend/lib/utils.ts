@@ -2,17 +2,41 @@ import { API_BASE } from "./constants";
 
 /** User mặc định dùng cho mọi request (X-User-ID, terminal). */
 const DEFAULT_USER_ID = "user-001";
+const SANDBOX_ID_STORAGE_KEY = "sandbox_id";
 
 export function getUserId(): string {
   return DEFAULT_USER_ID;
 }
 
+export function getSandboxId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(SANDBOX_ID_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setSandboxId(sandboxId: string): void {
+  if (!sandboxId || typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SANDBOX_ID_STORAGE_KEY, sandboxId);
+  } catch {
+    // ignore storage issues
+  }
+}
+
 /** Header cho API request (có kèm user ID). */
 export function apiHeaders(): Record<string, string> {
-  return {
+  const headers: Record<string, string> = {
     "X-User-ID": getUserId(),
     "Content-Type": "application/json",
   };
+  const sandboxId = getSandboxId();
+  if (sandboxId) {
+    headers["X-Sandbox-ID"] = sandboxId;
+  }
+  return headers;
 }
 
 /** URL WebSocket cho terminal (PTY), có gắn user_id. */

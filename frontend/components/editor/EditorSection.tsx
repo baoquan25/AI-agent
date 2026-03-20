@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import type { TabItem, FileEdit } from '../../lib/types';
+import type { LineDecision } from '../../lib/lineDiff';
 import { VscPlay } from '../../lib/icons';
 import { EditorTabs } from './EditorTabs';
 import { DiffReview } from './DiffReview';
@@ -26,8 +27,9 @@ type EditorSectionProps = {
   pendingDiffs: FileEdit[];
   reviewIndex: number;
   onSetReviewIndex: (idx: number) => void;
-  onAcceptDiff: (path: string) => void;
-  onRejectDiff: (path: string) => void;
+  lineDecisions: Record<string, Record<string, LineDecision>>;
+  onAcceptLine: (path: string, changeId: string) => void;
+  onRejectLine: (path: string, changeId: string) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
 };
@@ -48,8 +50,9 @@ export function EditorSection(props: EditorSectionProps) {
     pendingDiffs,
     reviewIndex,
     onSetReviewIndex,
-    onAcceptDiff,
-    onRejectDiff,
+    lineDecisions,
+    onAcceptLine,
+    onRejectLine,
     onAcceptAll,
     onRejectAll,
   } = props;
@@ -63,8 +66,9 @@ export function EditorSection(props: EditorSectionProps) {
             pendingDiffs={pendingDiffs}
             reviewIndex={reviewIndex}
             onSetReviewIndex={onSetReviewIndex}
-            onAccept={onAcceptDiff}
-            onReject={onRejectDiff}
+            lineDecisions={lineDecisions}
+            onAcceptLine={onAcceptLine}
+            onRejectLine={onRejectLine}
             onAcceptAll={onAcceptAll}
             onRejectAll={onRejectAll}
           />

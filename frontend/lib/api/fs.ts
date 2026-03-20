@@ -1,11 +1,19 @@
 import { API_BASE } from '../constants';
-import { apiHeaders } from '../utils';
+import { apiHeaders, setSandboxId } from '../utils';
 import type { TreeNode } from '../types';
+
+function captureSandboxId(data: unknown): void {
+  const sandboxId = typeof data === 'object' && data !== null ? (data as { sandbox_id?: unknown }).sandbox_id : undefined;
+  if (typeof sandboxId === 'string' && sandboxId.trim()) {
+    setSandboxId(sandboxId);
+  }
+}
 
 export async function loadTree(signal?: AbortSignal): Promise<TreeNode | null> {
   try {
     const res = await fetch(`${API_BASE}/fs/tree`, { headers: apiHeaders(), signal });
     const data = await res.json();
+    captureSandboxId(data);
     return data.success && data.tree ? data.tree : null;
   } catch {
     return null;
@@ -19,6 +27,7 @@ export async function loadList(path: string = '', signal?: AbortSignal): Promise
     const q = path ? `?path=${encodeURIComponent(path)}` : '';
     const res = await fetch(`${API_BASE}/fs/list${q}`, { headers: apiHeaders(), signal });
     const data = await res.json();
+    captureSandboxId(data);
     return data.success && Array.isArray(data.files) ? data.files : null;
   } catch {
     return null;
@@ -27,7 +36,9 @@ export async function loadList(path: string = '', signal?: AbortSignal): Promise
 
 export async function getFileContent(path: string, signal?: AbortSignal): Promise<{ success: boolean; content?: string; detail?: string }> {
   const res = await fetch(`${API_BASE}/fs/file/content?path=${encodeURIComponent(path)}`, { headers: apiHeaders(), signal });
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }
 
 export async function createFile(path: string, content: string = ''): Promise<{ success: boolean; detail?: string }> {
@@ -36,7 +47,9 @@ export async function createFile(path: string, content: string = ''): Promise<{ 
     headers: apiHeaders(),
     body: JSON.stringify({ path, content }),
   });
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }
 
 export async function createFolder(path: string): Promise<{ success: boolean; detail?: string }> {
@@ -45,7 +58,9 @@ export async function createFolder(path: string): Promise<{ success: boolean; de
     headers: apiHeaders(),
     body: JSON.stringify({ path }),
   });
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }
 
 export async function deletePath(path: string, recursive: boolean = true): Promise<{ success: boolean; detail?: string }> {
@@ -53,7 +68,9 @@ export async function deletePath(path: string, recursive: boolean = true): Promi
     `${API_BASE}/fs/path?path=${encodeURIComponent(path)}&recursive=${recursive}`,
     { method: 'DELETE', headers: apiHeaders() }
   );
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }
 
 export async function renamePath(source: string, destination: string): Promise<{ success: boolean; detail?: string }> {
@@ -62,7 +79,9 @@ export async function renamePath(source: string, destination: string): Promise<{
     headers: apiHeaders(),
     body: JSON.stringify({ source, destination }),
   });
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }
 
 export async function searchFiles(pattern: string, path: string = ''): Promise<{ success: boolean; matches?: string[] }> {
@@ -72,7 +91,9 @@ export async function searchFiles(pattern: string, path: string = ''): Promise<{
       headers: apiHeaders(),
       body: JSON.stringify({ pattern, path }),
     });
-    return res.json();
+    const data = await res.json();
+    captureSandboxId(data);
+    return data;
   } catch (e) {
     return { success: false, matches: [] };
   }
@@ -84,5 +105,7 @@ export async function putFileContent(path: string, content: string): Promise<{ s
     headers: apiHeaders(),
     body: JSON.stringify({ path, content }),
   });
-  return res.json();
+  const data = await res.json();
+  captureSandboxId(data);
+  return data;
 }

@@ -6,6 +6,7 @@ from dependencies import WORKSPACE
 
 # In-memory thread store
 _threads: dict[str, dict] = {}
+_sandbox_by_client: dict[str, str] = {}
 _SENTINEL = object()
 
 
@@ -53,3 +54,15 @@ def create_thread(thread_id: str, metadata: dict) -> dict:
 
 def delete_thread(thread_id: str) -> None:
     _threads.pop(thread_id, None)
+
+
+def get_bound_sandbox_id(client_key: str) -> str | None:
+    if not client_key:
+        return None
+    return _sandbox_by_client.get(client_key)
+
+
+def bind_sandbox_id(client_key: str, sandbox_id: str) -> None:
+    if not client_key or not sandbox_id:
+        return
+    _sandbox_by_client[client_key] = sandbox_id

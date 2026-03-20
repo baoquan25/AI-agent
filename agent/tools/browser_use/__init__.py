@@ -31,6 +31,8 @@ from tools.browser_use.definition import (
 
 
 __all__ = [
+    # Tool set
+    "BrowserToolSet",
     # Tool classes
     "BrowserNavigateTool",
     "BrowserClickTool",
@@ -59,5 +61,4 @@ __all__ = [
     "BrowserSetStorageAction",
     # Observations
     "BrowserObservation",
-    "BrowserToolSet",
 ]

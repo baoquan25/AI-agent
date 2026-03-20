@@ -1,7 +1,11 @@
 # pyright: basic
 # type: ignore
 
-from .definition import FileEditorAction, FileEditorObservation, FileEditorTool
+from .definition import (
+    FileEditorAction,
+    FileEditorObservation,
+    FileEditorTool,
+)
 
 __all__ = [
     "FileEditorAction",

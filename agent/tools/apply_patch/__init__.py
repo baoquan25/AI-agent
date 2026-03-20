@@ -1,3 +1,7 @@
-from .definition import ApplyPatchTool
+from .definition import (
+    ApplyPatchTool,
+)
 
-__all__ = ["ApplyPatchTool"]
+__all__ = [
+    "ApplyPatchTool",
+]

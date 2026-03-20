@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useStream } from '@langchain/langgraph-sdk/react';
 import type { ChatMessage, FileEdit } from '../lib/types';
 import { AGENT_BASE } from '../lib/constants';
-import { getUserId, escapeHtml, stripAnsi } from '../lib/utils';
+import { getUserId, getSandboxId, escapeHtml, stripAnsi } from '../lib/utils';
 import { deleteConversation } from '../lib/api/agent';
 
 type SetOutputHtml = (html: string) => void;
@@ -18,6 +18,50 @@ type CodeOutput = {
   success?: boolean;
   outputs?: Array<{ type?: string; data?: string; library?: string }>;
 };
+
+type RawFileEdit = {
+  path?: unknown;
+  action?: unknown;
+  old_content?: unknown;
+  new_content?: unknown;
+};
+
+function normalizeFileEditAction(action: unknown): FileEdit['action'] | null {
+  if (typeof action !== 'string') return null;
+  const v = action.trim().toLowerCase();
+  if (v === 'create' || v === 'add' || v === 'added') return 'create';
+  if (v === 'update' || v === 'updated' || v === 'modify' || v === 'modified') return 'update';
+  if (v === 'delete' || v === 'deleted' || v === 'remove' || v === 'removed') return 'delete';
+  return null;
+}
+
+function normalizeFileEditPath(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return '';
+  const workspacePrefixes = ['/home/daytona/workspace/', '/workspace/'];
+  for (const prefix of workspacePrefixes) {
+    if (trimmed.startsWith(prefix)) return trimmed.slice(prefix.length);
+  }
+  return trimmed.replace(/^\/+/, '');
+}
+
+function normalizeFileEdits(fileEdits: unknown): FileEdit[] {
+  if (!Array.isArray(fileEdits)) return [];
+  const normalized: FileEdit[] = [];
+  for (const item of fileEdits as RawFileEdit[]) {
+    if (!item || typeof item !== 'object') continue;
+    const path = typeof item.path === 'string' ? normalizeFileEditPath(item.path) : '';
+    const action = normalizeFileEditAction(item.action);
+    if (!path || !action) continue;
+    normalized.push({
+      path,
+      action,
+      old_content: item.old_content == null ? null : String(item.old_content),
+      new_content: item.new_content == null ? null : String(item.new_content),
+    });
+  }
+  return normalized;
+}
 
 function renderCodeOutputs(items: CodeOutput[]): string {
   let html = '';
@@ -89,15 +133,17 @@ export function useChat(
   onThreadIdRef.current = onThreadId;
 
   const activeThreadId = activeSession?.threadId ?? undefined;
+  const sandboxId = getSandboxId();
   const streamConfig = useMemo(() => ({
     apiUrl: `${AGENT_BASE}/conversation`,
     apiKey: getUserId(),
+    defaultHeaders: sandboxId ? { 'X-Sandbox-ID': sandboxId } : undefined,
     assistantId: 'agent' as const,
     threadId: activeThreadId,
     onThreadId: (id: string) => {
       queueMicrotask(() => onThreadIdRef.current(id));
     },
-  }), [activeThreadId]);
+  }), [activeThreadId, sandboxId]);
 
   const stream = useStream(streamConfig);
 
@@ -143,12 +189,15 @@ export function useChat(
   const prevEditsIdRef = useRef('');
   useEffect(() => {
     const vals = stream.values as Record<string, unknown> | null;
-    const editsId = (vals?._file_edits_id as string) ?? '';
+    const edits = normalizeFileEdits(vals?.file_edits);
+    if (edits.length === 0) return;
+    const providedEditsId = typeof vals?._file_edits_id === 'string' ? vals._file_edits_id.trim() : '';
+    const fallbackEditsId = JSON.stringify(
+      edits.map((e) => [e.path, e.action, e.old_content, e.new_content] as const),
+    );
+    const editsId = providedEditsId || fallbackEditsId;
     if (!editsId || editsId === prevEditsIdRef.current) return;
-    const fileEdits = vals?.file_edits;
-    if (!Array.isArray(fileEdits) || fileEdits.length === 0) return;
     prevEditsIdRef.current = editsId;
-    const edits = fileEdits as FileEdit[];
     queueMicrotask(() => onFileEditsRef.current?.(edits));
   }, [stream.values]);
 

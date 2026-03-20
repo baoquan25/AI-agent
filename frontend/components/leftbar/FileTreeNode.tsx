@@ -110,6 +110,7 @@ export function FileTreeNode(props: FileTreeNodeProps) {
     <div key={path}>
       <div
         className={`tree-item ${path === selectedTreePath ? 'selected' : ''}`}
+        data-tree-path={path}
         style={{ paddingLeft }}
         onClick={() => {
           onSelect(path, isDir, node);

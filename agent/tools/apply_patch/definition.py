@@ -12,6 +12,7 @@ from openhands.sdk.tool import ToolExecutor
 from daytona import Sandbox
 
 from .core import Commit, DiffError, process_patch
+from dependencies import WORKSPACE
 from tools.notify import notify_file_change
 
 
@@ -38,6 +39,9 @@ Rules:
 - Use "*** Move to: <new_path>" after "*** Update File:" to rename/move a file
 - Use "*** End of File" to anchor changes at the end of a file
 - Multiple file operations can be included in a single patch
+- Paths must be inside workspace. Prefer `workspace/...` or `/home/daytona/workspace/...`
+- `/workspace/...` is accepted and normalized to `/home/daytona/workspace/...`
+- Do not use host paths like `/home/ducminh/...`
 
 Example — update one file and create another:
 
@@ -85,6 +89,75 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
         self.sandbox = sandbox
         self._file_edits = file_edits
 
+    def _strip_workspace_prefix(self, path: str) -> tuple[str, bool]:
+        value = path.strip()
+        if not value:
+            return "", False
+
+        workspace_prefixes = (
+            f"{WORKSPACE}/",
+            WORKSPACE,
+            "/home/daytona/workspace/",
+            "/home/daytona/workspace",
+            "/workspace/",
+            "/workspace",
+            "workspace/",
+            "workspace",
+        )
+
+        for prefix in workspace_prefixes:
+            if value == prefix:
+                return "", True
+            if value.startswith(f"{prefix}/"):
+                return value[len(prefix) + 1 :], True
+            if value.startswith(prefix) and prefix.endswith("/"):
+                return value[len(prefix) :], True
+
+        return value, False
+
+    def _normalize_workspace_path(self, path: str) -> str:
+        raw_path = (path or "").strip()
+        if not raw_path:
+            raise DiffError("Path is required")
+
+        rel_path, is_workspace_anchored = self._strip_workspace_prefix(raw_path)
+
+        if rel_path.startswith("/"):
+            raise DiffError(
+                f"Path must be inside workspace ({WORKSPACE}): {raw_path}"
+            )
+
+        normalized_rel = posixpath.normpath(rel_path).lstrip("/")
+        if normalized_rel in ("", "."):
+            if is_workspace_anchored:
+                return WORKSPACE
+            raise DiffError(f"Path must point inside workspace: {raw_path}")
+        if normalized_rel == ".." or normalized_rel.startswith("../"):
+            raise DiffError(f"Path escapes workspace: {raw_path}")
+
+        return f"{WORKSPACE}/{normalized_rel}"
+
+    def _normalize_patch_paths(self, patch_text: str) -> str:
+        path_prefixes = (
+            "*** Update File: ",
+            "*** Delete File: ",
+            "*** Add File: ",
+            "*** Move to: ",
+        )
+        out_lines: list[str] = []
+        for line in patch_text.split("\n"):
+            rewritten = False
+            for prefix in path_prefixes:
+                if line.startswith(prefix):
+                    original_path = line[len(prefix) :]
+                    normalized_path = self._normalize_workspace_path(original_path)
+                    out_lines.append(f"{prefix}{normalized_path}")
+                    rewritten = True
+                    break
+            if not rewritten:
+                out_lines.append(line)
+        return "\n".join(out_lines)
+
     def _read_file(self, path: str) -> str:
         content_bytes = self.sandbox.fs.download_file(path)
         if isinstance(content_bytes, bytes):
@@ -114,7 +187,7 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
             return
         from .core import ActionType
         for path, change in commit.changes.items():
-            action = change.type.value
+            action = "create" if change.type == ActionType.ADD else change.type.value
             existing = next((e for e in self._file_edits if e["path"] == path), None)
             if existing:
                 existing["new_content"] = change.new_content
@@ -139,8 +212,9 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
 
     def __call__(self, action: ApplyPatchAction, conversation=None) -> ApplyPatchObservation:
         try:
+            normalized_patch = self._normalize_patch_paths(action.patch)
             msg, fuzz, commit = process_patch(
-                action.patch,
+                normalized_patch,
                 open_fn=self._read_file,
                 write_fn=self._write_file,
                 remove_fn=self._remove_file,
@@ -161,10 +235,15 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
 
 class ApplyPatchTool(ToolDefinition[ApplyPatchAction, ApplyPatchObservation]):
     """Apply unified text patches to files in the sandbox."""
-    name = "apply_patch"
 
     @classmethod
-    def create(cls, conv_state, *, sandbox: Sandbox, file_edits: list | None = None) -> Sequence[ToolDefinition]:
+    def create(cls, conv_state, *, sandbox: Sandbox | None = None, file_edits: list | None = None) -> Sequence[ToolDefinition]:
+        if sandbox is None:
+            sandbox = conv_state.agent_state.get("sandbox")
+        if not sandbox:
+            raise ValueError("sandbox not found in conv_state.agent_state")
+        if file_edits is None:
+            file_edits = conv_state.agent_state.get("file_edits")
         executor = ApplyPatchExecutor(sandbox, file_edits=file_edits)
         return [cls(
             description=_DESCRIPTION,

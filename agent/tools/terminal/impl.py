@@ -149,7 +149,7 @@ class TerminalExecutor(ToolExecutor[TerminalAction, TerminalObservation]):
 
     def _execute_command(self, action: TerminalAction) -> TerminalObservation:
         """Execute a normal bash command in the sandbox."""
-        cwd = action.working_dir or self._cwd
+        cwd = self._normalize_cwd(action.working_dir or self._cwd)
         user_cmd = action.command.strip()
 
         if not user_cmd:
@@ -213,6 +213,18 @@ class TerminalExecutor(ToolExecutor[TerminalAction, TerminalObservation]):
                 working_dir=cwd,
                 is_error=True,
             )
+
+    def _normalize_cwd(self, cwd: str) -> str:
+        raw_cwd = (cwd or "").strip()
+        if not raw_cwd:
+            return DEFAULT_CWD
+        if raw_cwd in ("workspace", "workspace/"):
+            return DEFAULT_CWD
+        if raw_cwd == "/workspace":
+            return DEFAULT_CWD
+        if raw_cwd.startswith("/workspace/"):
+            return f"{DEFAULT_CWD}/{raw_cwd[len('/workspace/'):]}"
+        return raw_cwd
 
 
 # ── Utility functions ─────────────────────────────────────────────────────────

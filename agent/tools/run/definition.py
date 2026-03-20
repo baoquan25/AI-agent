@@ -193,10 +193,16 @@ class RunFileExecutor(ToolExecutor[RunFileAction, RunFileObservation]):
 
 
 class RunFileTool(ToolDefinition[RunFileAction, RunFileObservation]):
-    name = "run_file"
+    """Run existing files via sandbox /run API."""
 
     @classmethod
-    def create(cls, conv_state, *, sandbox: Sandbox, execution_log: list | None = None) -> Sequence[ToolDefinition]:
+    def create(cls, conv_state, *, sandbox: Sandbox | None = None, execution_log: list | None = None) -> Sequence[ToolDefinition]:
+        if sandbox is None:
+            sandbox = conv_state.agent_state.get("sandbox")
+        if not sandbox:
+            raise ValueError("sandbox not found in conv_state.agent_state")
+        if execution_log is None:
+            execution_log = conv_state.agent_state.get("execution_log")
         executor = RunFileExecutor(sandbox, execution_log=execution_log)
         return [cls(
             description=_DESCRIPTION,

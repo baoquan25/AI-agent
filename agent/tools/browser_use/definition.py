@@ -15,7 +15,6 @@ from openhands.sdk.tool import (
     Observation,
     ToolAnnotations,
     ToolDefinition,
-    register_tool,
 )
 from openhands.sdk.utils import DEFAULT_TEXT_CONTENT_LIMIT, maybe_truncate
 
@@ -24,6 +23,35 @@ from openhands.sdk.utils import DEFAULT_TEXT_CONTENT_LIMIT, maybe_truncate
 if TYPE_CHECKING:
     from openhands.sdk.conversation.state import ConversationState
     from tools.browser_use.impl import BrowserToolExecutor
+
+
+def _resolve_browser_executor(
+    conv_state: "ConversationState | None" = None,
+    *,
+    executor: "BrowserToolExecutor | None" = None,
+    **executor_config,
+) -> "BrowserToolExecutor":
+    if executor is not None:
+        return executor
+    if conv_state is None:
+        raise ValueError("conv_state is required when executor is not provided")
+
+    import sys
+
+    if sys.platform == "win32":
+        from tools.browser_use.impl_windows import WindowsBrowserToolExecutor
+
+        return WindowsBrowserToolExecutor(
+            full_output_save_dir=conv_state.env_observation_persistence_dir,
+            **executor_config,
+        )
+
+    from tools.browser_use.impl import BrowserToolExecutor
+
+    return BrowserToolExecutor(
+        full_output_save_dir=conv_state.env_observation_persistence_dir,
+        **executor_config,
+    )
 
 
 # Directory where browser session recordings are saved
@@ -172,7 +200,16 @@ class BrowserNavigateTool(ToolDefinition[BrowserNavigateAction, BrowserObservati
     """Tool for browser navigation."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_NAVIGATE_DESCRIPTION,
@@ -222,7 +259,16 @@ class BrowserClickTool(ToolDefinition[BrowserClickAction, BrowserObservation]):
     """Tool for clicking browser elements."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_CLICK_DESCRIPTION,
@@ -269,7 +315,16 @@ class BrowserTypeTool(ToolDefinition[BrowserTypeAction, BrowserObservation]):
     """Tool for typing text into browser elements."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_TYPE_DESCRIPTION,
@@ -313,7 +368,16 @@ class BrowserGetStateTool(ToolDefinition[BrowserGetStateAction, BrowserObservati
     """Tool for getting browser state."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_GET_STATE_DESCRIPTION,
@@ -360,7 +424,16 @@ class BrowserGetContentTool(
     """Tool for getting page content in markdown."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_GET_CONTENT_DESCRIPTION,
@@ -404,7 +477,16 @@ class BrowserScrollTool(ToolDefinition[BrowserScrollAction, BrowserObservation])
     """Tool for scrolling the browser page."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_SCROLL_DESCRIPTION,
@@ -442,7 +524,16 @@ class BrowserGoBackTool(ToolDefinition[BrowserGoBackAction, BrowserObservation])
     """Tool for going back in browser history."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_GO_BACK_DESCRIPTION,
@@ -480,7 +571,16 @@ class BrowserListTabsTool(ToolDefinition[BrowserListTabsAction, BrowserObservati
     """Tool for listing browser tabs."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_LIST_TABS_DESCRIPTION,
@@ -523,7 +623,16 @@ class BrowserSwitchTabTool(ToolDefinition[BrowserSwitchTabAction, BrowserObserva
     """Tool for switching browser tabs."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_SWITCH_TAB_DESCRIPTION,
@@ -565,7 +674,16 @@ class BrowserCloseTabTool(ToolDefinition[BrowserCloseTabAction, BrowserObservati
     """Tool for closing browser tabs."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_CLOSE_TAB_DESCRIPTION,
@@ -606,7 +724,16 @@ class BrowserGetStorageTool(
     """Tool for getting browser storage."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_GET_STORAGE_DESCRIPTION,
@@ -654,7 +781,16 @@ class BrowserSetStorageTool(
     """Tool for setting browser storage."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_SET_STORAGE_DESCRIPTION,
@@ -704,7 +840,16 @@ class BrowserStartRecordingTool(
     """Tool for starting browser session recording."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_START_RECORDING_DESCRIPTION,
@@ -750,7 +895,16 @@ class BrowserStopRecordingTool(
     """Tool for stopping browser session recording."""
 
     @classmethod
-    def create(cls, executor: "BrowserToolExecutor") -> Sequence[Self]:
+    def create(
+        cls,
+        conv_state: "ConversationState | None" = None,
+        *,
+        executor: "BrowserToolExecutor | None" = None,
+        **executor_config,
+    ) -> Sequence[Self]:
+        executor = _resolve_browser_executor(
+            conv_state, executor=executor, **executor_config
+        )
         return [
             cls(
                 description=BROWSER_STOP_RECORDING_DESCRIPTION,
@@ -785,27 +939,7 @@ class BrowserToolSet(ToolDefinition[BrowserAction, BrowserObservation]):
         conv_state: "ConversationState",
         **executor_config,
     ) -> list[ToolDefinition[BrowserAction, BrowserObservation]]:
-        # Import executor only when actually needed to
-        # avoid hanging during module import
-        import sys
-
-        # Use Windows-specific executor on Windows systems
-        if sys.platform == "win32":
-            from tools.browser_use.impl_windows import (
-                WindowsBrowserToolExecutor,
-            )
-
-            executor = WindowsBrowserToolExecutor(
-                full_output_save_dir=conv_state.env_observation_persistence_dir,
-                **executor_config,
-            )
-        else:
-            from tools.browser_use.impl import BrowserToolExecutor
-
-            executor = BrowserToolExecutor(
-                full_output_save_dir=conv_state.env_observation_persistence_dir,
-                **executor_config,
-            )
+        executor = _resolve_browser_executor(conv_state, **executor_config)
 
         # Each tool.create() returns a Sequence[Self], so we flatten the results
         tools: list[ToolDefinition[BrowserAction, BrowserObservation]] = []
@@ -825,8 +959,5 @@ class BrowserToolSet(ToolDefinition[BrowserAction, BrowserObservation]):
             BrowserStartRecordingTool,
             BrowserStopRecordingTool,
         ]:
-            tools.extend(tool_class.create(executor))
+            tools.extend(tool_class.create(conv_state, executor=executor))
         return tools
-
-
-register_tool(BrowserToolSet.name, BrowserToolSet)

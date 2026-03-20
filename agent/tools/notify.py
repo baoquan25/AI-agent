@@ -7,7 +7,6 @@ from dependencies import WORKSPACE
 
 logger = logging.getLogger("agent-api")
 
-
 def _strip_workspace(path: str) -> str:
     prefix = WORKSPACE.rstrip("/") + "/"
     if path.startswith(prefix):

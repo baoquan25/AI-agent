@@ -305,8 +305,9 @@ export default function Home() {
             pendingDiffs={diffReview.pendingDiffs}
             reviewIndex={diffReview.reviewIndex}
             onSetReviewIndex={diffReview.setReviewIndex}
-            onAcceptDiff={diffReview.acceptDiff}
-            onRejectDiff={diffReview.rejectDiff}
+            lineDecisions={diffReview.lineDecisions}
+            onAcceptLine={diffReview.acceptLine}
+            onRejectLine={diffReview.rejectLine}
             onAcceptAll={diffReview.acceptAll}
             onRejectAll={diffReview.rejectAll}
           />

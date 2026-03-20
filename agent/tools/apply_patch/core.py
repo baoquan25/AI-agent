@@ -199,9 +199,17 @@ class Parser(BaseModel):
             ("*** End Patch", "*** Update File:", "*** Delete File:", "*** Add File:")
         ):
             s = self.read_str()
-            if not s.startswith("+"):
-                raise DiffError(f"Invalid Add File Line: {s}")
-            s = s[1:]
+            candidate = s
+            if not candidate.startswith("+"):
+                # Be tolerant of indentation introduced by formatters/log wrappers.
+                stripped = candidate.lstrip(" \t")
+                if stripped.startswith("+"):
+                    candidate = stripped
+                else:
+                    raise DiffError(
+                        f"Invalid Add File Line (must start with '+'): {s!r}"
+                    )
+            s = candidate[1:]
             lines.append(s)
         return PatchAction(
             type=ActionType.ADD,

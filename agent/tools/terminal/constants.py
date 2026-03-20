@@ -7,7 +7,7 @@ MAX_OUTPUT_CHARS: int = 80_000
 
 DEFAULT_TIMEOUT: int = 30
 
-DEFAULT_CWD: str = "/workspace"
+DEFAULT_CWD: str = "/home/daytona/workspace"
 
 CWD_SENTINEL: str = "__CWD__"
 

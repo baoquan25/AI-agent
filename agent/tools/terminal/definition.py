@@ -136,26 +136,28 @@ TOOL_DESCRIPTION = """Execute a bash command in the terminal within a persistent
 
 
 class TerminalTool(ToolDefinition[TerminalAction, TerminalObservation]):
-    """ToolDefinition that initializes TerminalExecutor."""
-
-    name = "terminal"
+    """Execute bash commands in sandbox terminal."""
 
     @classmethod
     def create(
         cls,
         conv_state,
         *,
-        sandbox: Sandbox,
+        sandbox: Sandbox | None = None,
         executor: ToolExecutor | None = None,
     ) -> Sequence["TerminalTool"]:
         """Initialize TerminalTool with executor parameters.
 
         Args:
             conv_state: Conversation state (used by the SDK framework).
-            sandbox: Sandbox instance for remote command execution.
+            sandbox: Optional sandbox instance. Falls back to conv_state.agent_state.
             executor: Optional pre-built executor (for testing).
         """
         if executor is None:
+            if sandbox is None:
+                sandbox = conv_state.agent_state.get("sandbox")
+            if not sandbox:
+                raise ValueError("sandbox not found in conv_state.agent_state")
             from tools.terminal.impl import TerminalExecutor
             executor = TerminalExecutor(sandbox=sandbox)
 

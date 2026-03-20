@@ -166,6 +166,42 @@ export function useFileTree(
     }
   }, [fileTreeData]);
 
+  // Keep file-tree selection aligned with the currently active editor tab.
+  useEffect(() => {
+    if (!currentFilePath) return;
+    const normalized = currentFilePath.replace(/^\/+|\/+$/g, '');
+    if (!normalized) return;
+
+    setSelectedTreePath(normalized);
+    const parent = normalized.includes('/') ? normalized.split('/').slice(0, -1).join('/') : '';
+    setSelectedFolder(parent);
+
+    const parts = normalized.split('/');
+    if (parts.length > 1) {
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? `${acc}/${parts[i]}` : parts[i];
+          next.add(acc);
+        }
+        return next;
+      });
+    }
+  }, [currentFilePath]);
+
+  useEffect(() => {
+    if (!currentFilePath) return;
+    const normalized = currentFilePath.replace(/^\/+|\/+$/g, '');
+    if (!normalized) return;
+    const timer = window.setTimeout(() => {
+      const esc = (window as any).CSS?.escape?.(normalized) ?? normalized.replace(/"/g, '\\\"');
+      const el = document.querySelector(`#fileTree .tree-item[data-tree-path="${esc}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: 'nearest' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentFilePath, fileTreeData]);
+
   const toggleFolder = useCallback((path: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev);

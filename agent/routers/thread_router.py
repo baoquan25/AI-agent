@@ -6,11 +6,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from dependencies import get_sandbox, WORKSPACE
+from dependencies import get_sandbox
 from services.llm import run_agent
 from services.conversation import (
     _SENTINEL,
     now_iso, ensure_uuid, sse, strip_workspace,
+    get_bound_sandbox_id, bind_sandbox_id,
     get_thread, create_thread, delete_thread,
 )
 
@@ -19,12 +20,50 @@ logger = logging.getLogger("agent-api")
 router = APIRouter(prefix="/conversation", tags=["Conversation"])
 
 
-def _user_id(request: Request) -> str:
+def _sandbox_id(request: Request) -> str:
     return (
-        request.headers.get("x-api-key")
-        or request.headers.get("x-user-id")
-        or "default_user"
-    )
+        request.headers.get("x-sandbox-id")
+        or ""
+    ).strip()
+
+
+def _client_key(request: Request) -> str:
+    return (
+        request.headers.get("x-user-id")
+        or request.headers.get("x-api-key")
+        or ""
+    ).strip()
+
+
+def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str]:
+    """Resolve sandbox_id for this thread.
+
+    Priority:
+    1. x-sandbox-id header from current request
+    2. previously bound thread.metadata["sandbox_id"]
+    3. backend mapping by client key (x-user-id/x-api-key)
+    """
+    header_sandbox_id = _sandbox_id(request)
+    client_key = _client_key(request)
+    metadata = thread.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        thread["metadata"] = metadata
+
+    bound_sandbox_id = str(metadata.get("sandbox_id", "") or "").strip()
+    remembered_sandbox_id = get_bound_sandbox_id(client_key) or ""
+    sandbox_id = header_sandbox_id or bound_sandbox_id or remembered_sandbox_id
+    if not sandbox_id:
+        raise HTTPException(
+            400,
+            "Missing sandbox id. Provide header 'x-sandbox-id' at least once.",
+        )
+
+    # Bind/refresh sandbox id to thread metadata so next requests don't need header.
+    if sandbox_id != bound_sandbox_id:
+        metadata["sandbox_id"] = sandbox_id
+
+    return sandbox_id, client_key
 
 
 # ── POST /conversation/threads ───────────────────────────────────────────────
@@ -78,7 +117,11 @@ async def run_stream(thread_id: str, request: Request):
         uuid.UUID(thread_id)
     except ValueError:
         raise HTTPException(400, f"Invalid thread_id '{thread_id}': must be a valid UUID.")
-    user_id = _user_id(request)
+
+    thread = get_thread(thread_id)
+    if thread is None:
+        thread = create_thread(thread_id, {})
+    sandbox_id, client_key = _resolve_thread_sandbox_id(thread, request)
 
     body = await request.json()
     messages = (body.get("input") or {}).get("messages") or []
@@ -86,18 +129,19 @@ async def run_stream(thread_id: str, request: Request):
     if not human_text:
         raise HTTPException(400, "No human message in input")
 
-    sandbox = get_sandbox(user_id)
+    sandbox = get_sandbox(sandbox_id)
     if sandbox is None:
-        raise HTTPException(404, f"No sandbox found for user '{user_id}'. Please create a sandbox first.")
+        raise HTTPException(
+            404,
+            f"No sandbox found for '{sandbox_id}'. "
+            "Please provide a valid sandbox id in header 'x-sandbox-id'.",
+        )
+    bind_sandbox_id(client_key, sandbox_id)
 
     try:
-        sandbox.fs.create_folder(WORKSPACE, "755")
+        sandbox.fs.create_folder("/home/daytona/workspace", "755")
     except Exception:
         pass
-
-    thread = get_thread(thread_id)
-    if thread is None:
-        thread = create_thread(thread_id, {})
 
     thread["values"]["messages"].append({
         "type": "human",
@@ -118,7 +162,7 @@ async def run_stream(thread_id: str, request: Request):
 
         def _run():
             try:
-                reply = run_agent(sandbox, user_id, human_text,
+                reply = run_agent(sandbox, sandbox_id, human_text,
                                   conversation_id=thread_id,
                                   token_queue=token_queue, loop=loop,
                                   execution_log=execution_log,

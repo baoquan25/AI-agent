@@ -2,12 +2,11 @@ import os
 import uuid
 import asyncio
 from typing import Literal
-from openhands.sdk import LLM, Agent, Conversation, Tool, get_logger
+from openhands.sdk import LLM, Agent, Conversation, get_logger
 from openhands.sdk.llm.streaming import ModelResponseStream
 
 from config import settings
-from dependencies import WORKSPACE
-from tools.registry import create_tools
+from tools.registry import register_all_tools, get_tool_references
 from services.agent_context import agent_context, plugin
 
 logger = get_logger(__name__)
@@ -21,6 +20,10 @@ llm = LLM(
         reasoning_effort=settings.REASONING_EFFORT,
         stream=True,
     )
+
+# Register all tools once at module load
+register_all_tools()
+
 
 def make_token_callback(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, content_parts: list[str]):
 
@@ -62,19 +65,18 @@ def make_token_callback(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, c
     return on_token
 
 
-def run_agent(sandbox, user_id: str, message: str, conversation_id: str | None = None,
+def run_agent(sandbox, sandbox_id: str, message: str, conversation_id: str | None = None,
               token_queue: asyncio.Queue | None = None, loop: asyncio.AbstractEventLoop | None = None,
               execution_log: list | None = None, file_edits: list | None = None) -> str:
-    toolset_name = create_tools(sandbox, user_id=user_id, execution_log=execution_log, file_edits=file_edits)
+    tools = get_tool_references()
 
-    local_workspace = os.path.join("/tmp", "openhands_workspaces", user_id.replace(os.sep, "_"))
+    local_workspace = os.path.join("/tmp", "openhands_workspaces", sandbox_id.replace(os.sep, "_"))
     os.makedirs(local_workspace, exist_ok=True)
 
     agent = Agent(
         llm=llm,
-        tools=[Tool(name=toolset_name)],
+        tools=tools,
         agent_context=agent_context,
-        # mcp_config tắt tạm thời; bật lại: mcp_config=plugin.mcp_config or {}
     )
 
     resolved_id = uuid.UUID(conversation_id)
@@ -91,6 +93,15 @@ def run_agent(sandbox, user_id: str, message: str, conversation_id: str | None =
         persistence_dir=PERSISTENCE_DIR,
         conversation_id=resolved_id,
         hook_config=plugin.hooks,
+    )
+
+
+    conversation._state.agent_state["sandbox"] = sandbox
+    conversation._state.agent_state["execution_log"] = (
+        execution_log if execution_log is not None else []
+    )
+    conversation._state.agent_state["file_edits"] = (
+        file_edits if file_edits is not None else []
     )
 
     conversation.send_message(message)
