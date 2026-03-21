@@ -1,9 +1,7 @@
 'use client';
 
 import type { TreeNode } from '../../lib/types';
-import { formatFileSize } from '../../lib/utils';
 import { getFileIcon, VscChevronDown, VscChevronRight } from '../../lib/icons';
-import { TreeInlineCreate } from './TreeInlineCreate';
 
 type FileTreeNodeProps = {
   node: TreeNode;
@@ -120,7 +118,6 @@ export function FileTreeNode(props: FileTreeNodeProps) {
         <div className="tree-item-content">
           {leadIcon}
           <span className="tree-item-name">{node.name}</span>
-          {node.size != null && <span className="tree-item-size">{formatFileSize(node.size)}</span>}
         </div>
       </div>
       {(hasChildren || (path === treeCreateParentPath && treeCreateMode) || (isDir && shouldExpand)) && (

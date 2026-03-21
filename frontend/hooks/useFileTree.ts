@@ -62,7 +62,6 @@ function mergeListIntoTree(tree: TreeNode | null, folderPath: string, items: Lis
         type: f.type as 'file' | 'directory',
         name: f.name,
         path: f.path,
-        ...(f.size != null && { size: f.size }),
       }));
       children.sort((a, b) => (a.type === b.type ? (a.name < b.name ? -1 : 1) : a.type === 'directory' ? -1 : 1));
       return { ...n, children };

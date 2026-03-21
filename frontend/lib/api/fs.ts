@@ -20,7 +20,7 @@ export async function loadTree(signal?: AbortSignal): Promise<TreeNode | null> {
   }
 }
 
-export type ListFileItem = { name: string; path: string; type: 'file' | 'directory'; size?: number; modified?: string };
+export type ListFileItem = { name: string; path: string; type: 'file' | 'directory'; modified?: string };
 
 export async function loadList(path: string = '', signal?: AbortSignal): Promise<ListFileItem[] | null> {
   try {

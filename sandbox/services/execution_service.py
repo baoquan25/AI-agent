@@ -61,8 +61,10 @@ class ExecutionService:
         result = executor.execute(code, timeout=timeout)
 
         error_text = result.get("error", "") or ""
-        if error_text:
-            logger.warning("Jupyter run failed, using direct run")
+        error_kind = str(result.get("error_kind", "") or "")
+        executed = bool(result.get("executed", False))
+        if error_text and not executed and error_kind == "infra":
+            logger.warning("Jupyter infrastructure failure before execution, using direct run")
             return self._run_direct(sandbox, code, timeout)
 
         stdout_text = result.get("stdout", "") or ""

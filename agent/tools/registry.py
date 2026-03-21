@@ -8,30 +8,28 @@ from tools.grep.definition import GrepTool
 from tools.glob.definition import GlobTool
 from tools.browser_use.definition import BrowserToolSet
 
-_registered = False
+_REGISTERED = False
 
-# Tool name → class mapping (registered once at startup)
-_TOOL_CLASSES = {
-    "RunFileTool":    RunFileTool,
-    "TerminalTool":   TerminalTool,
-    "FileEditorTool": FileEditorTool,
-    "ApplyPatchTool": ApplyPatchTool,
-    "GrepTool":       GrepTool,
-    "GlobTool":       GlobTool,
-    "BrowserToolSet": BrowserToolSet,
-}
-
-TOOL_NAMES = list(_TOOL_CLASSES.keys())
-
-
-def register_all_tools() -> None:
-    global _registered
-    if _registered:
+def register_all_tools():
+    global _REGISTERED
+    if _REGISTERED:
         return
-    for name, cls in _TOOL_CLASSES.items():
-        register_tool(name, cls)
-    _registered = True
+    register_tool("FileEditorTool", FileEditorTool)
+    register_tool("RunFileTool", RunFileTool)
+    register_tool("TerminalTool", TerminalTool)
+    register_tool("ApplyPatchTool", ApplyPatchTool)
+    register_tool("GrepTool", GrepTool)
+    register_tool("GlobTool", GlobTool)
+    register_tool("BrowserToolSet", BrowserToolSet)
+    _REGISTERED = True
 
-
-def get_tool_references() -> list[Tool]:
-    return [Tool(name=name) for name in TOOL_NAMES]
+def get_tool_references():
+    return [
+        Tool(name="FileEditorTool"),
+        Tool(name="RunFileTool"),
+        Tool(name="TerminalTool"),
+        Tool(name="ApplyPatchTool"),
+        Tool(name="GrepTool"),
+        Tool(name="GlobTool"),
+        Tool(name="BrowserToolSet"),
+    ]

@@ -16,48 +16,46 @@ from dependencies import WORKSPACE
 from tools.notify import notify_file_change
 
 
-_DESCRIPTION = """Apply a patch to modify multiple files in a single operation.
+_DESCRIPTION = """Use the `apply_patch` tool to edit files. Your patch language is a stripped‑down, file‑oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high‑level envelope:
 
-The patch must use this exact format:
+Required format:
+- Start with `*** Begin Patch`
+- End with `*** End Patch`
+- Include one or more operations:
+  - `*** Update File: <path>`
+  - `*** Add File: <path>`
+  - `*** Delete File: <path>`
+- Optional after `*** Update File:`: `*** Move to: <new_path>`
 
+Line prefixes in update hunks:
+- ` ` context
+- `-` delete
+- `+` add
+- `@@ <line>` anchor
+- `*** End of File` for EOF anchoring
+
+Path rules:
+- Must stay inside workspace
+- Preferred: `workspace/...` or `/home/daytona/workspace/...`
+- `/workspace/...` is normalized to `/home/daytona/workspace/...`
+- No `..` traversal and no host paths like `/home/ducminh/...`
+
+Do not wrap patch text in Markdown code fences.
+
+Example:
 *** Begin Patch
-*** Update File: <path>
-@@ <context line from original file>
- <unchanged line (space prefix)>
--<line to remove>
-+<line to add>
- <unchanged line>
+*** Add File: hello.txt
++Hello world
+*** Update File: src/app.py
+*** Move to: src/main.py
+@@ def greet():
+-print("Hi")
++print("Hello, world!")
+*** Delete File: obsolete.txt
 *** End Patch
 
-Rules:
-- Lines starting with " " (space) are context/unchanged lines
-- Lines starting with "+" are added lines
-- Lines starting with "-" are removed lines
-- Use "@@ <line>" to anchor the context position in the original file
-- Use "*** Add File: <path>" followed by lines starting with "+" to create a new file
-- Use "*** Delete File: <path>" to remove a file
-- Use "*** Move to: <new_path>" after "*** Update File:" to rename/move a file
-- Use "*** End of File" to anchor changes at the end of a file
-- Multiple file operations can be included in a single patch
-- Paths must be inside workspace. Prefer `workspace/...` or `/home/daytona/workspace/...`
-- `/workspace/...` is accepted and normalized to `/home/daytona/workspace/...`
-- Do not use host paths like `/home/ducminh/...`
-
-Example — update one file and create another:
-
-*** Begin Patch
-*** Update File: src/main.py
-@@ def hello():
--    return "old"
-+    return "new"
-*** Add File: src/utils.py
-+def helper():
-+    return True
-*** End Patch
-
-When to use apply_patch vs str_replace:
-- Use apply_patch when modifying MULTIPLE files at once or making MULTIPLE changes to the same file
-- Use str_replace (file_editor) for single, targeted edits in one file
+Use `apply_patch` for multi-file or multi-hunk edits.
+Use `str_replace` (file_editor) for one targeted single-file edit.
 """
 
 
@@ -94,24 +92,21 @@ class ApplyPatchExecutor(ToolExecutor[ApplyPatchAction, ApplyPatchObservation]):
         if not value:
             return "", False
 
-        workspace_prefixes = (
-            f"{WORKSPACE}/",
-            WORKSPACE,
-            "/home/daytona/workspace/",
+        value_no_trailing = value.rstrip("/") or "/"
+        workspace_aliases = (
+            WORKSPACE.rstrip("/") or "/",
             "/home/daytona/workspace",
-            "/workspace/",
             "/workspace",
-            "workspace/",
             "workspace",
         )
 
-        for prefix in workspace_prefixes:
-            if value == prefix:
-                return "", True
-            if value.startswith(f"{prefix}/"):
-                return value[len(prefix) + 1 :], True
-            if value.startswith(prefix) and prefix.endswith("/"):
-                return value[len(prefix) :], True
+        if value_no_trailing in workspace_aliases:
+            return "", True
+
+        for alias in workspace_aliases:
+            prefix = f"{alias}/"
+            if value.startswith(prefix):
+                return value[len(prefix) :].lstrip("/"), True
 
         return value, False
 

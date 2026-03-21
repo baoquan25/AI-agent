@@ -35,7 +35,9 @@ class JupyterKernelExecutor:
                 "stdout": str,
                 "stderr": str,
                 "outputs": List[{"type": mime, "data": ..., "library": optional}],
-                "error": Optional[str]
+                "error": Optional[str],
+                "executed": bool,       # whether user code execution was started
+                "error_kind": str,      # "user" | "timeout" | "infra" | ""
             }
         """
         try:
@@ -49,6 +51,8 @@ class JupyterKernelExecutor:
                 "stderr": "",
                 "outputs": [],
                 "error": str(e),
+                "executed": False,
+                "error_kind": "infra",
             }
 
     def _execute_via_ipython(self, code: str, timeout: int) -> dict[str, Any]:
@@ -78,6 +82,8 @@ class JupyterKernelExecutor:
                     "stderr": output,
                     "outputs": [],
                     "error": err,
+                    "executed": False,
+                    "error_kind": "infra",
                 }
 
             return self._parse_result(output)
@@ -90,7 +96,15 @@ class JupyterKernelExecutor:
                 "stderr": "",
                 "outputs": [],
                 "error": f"Process execution error: {str(e)}",
+                "executed": False,
+                "error_kind": "infra",
             }
+        finally:
+            for temp_path in (code_path, wrapper_path):
+                try:
+                    self.sandbox.fs.delete_file(temp_path)
+                except Exception:
+                    pass
 
     def _parse_result(self, output: str) -> dict[str, Any]:
         start = output.find("__IPY_RESULT_START__")
@@ -103,6 +117,8 @@ class JupyterKernelExecutor:
                 "stderr": "",
                 "outputs": [],
                 "error": "No result markers found",
+                "executed": False,
+                "error_kind": "infra",
             }
 
         json_str = output[start + len("__IPY_RESULT_START__") : end].strip()
@@ -116,10 +132,18 @@ class JupyterKernelExecutor:
                 "stderr": "",
                 "outputs": [],
                 "error": f"JSON parse error: {e}",
+                "executed": False,
+                "error_kind": "infra",
             }
 
         if result.get("error"):
             logger.error(f"User code error:\n{result['error'][:2000]}")
+
+        result.setdefault("executed", bool(result.get("success")))
+        if result.get("error"):
+            result.setdefault("error_kind", "user" if result.get("executed") else "infra")
+        else:
+            result.setdefault("error_kind", "")
 
         return result
 
@@ -141,6 +165,8 @@ def _run_kernel():
             "stderr": "",
             "outputs": [],
             "error": "Missing dependency: ipykernel and jupyter_client",
+            "executed": False,
+            "error_kind": "infra",
         }}
 
     stdout_chunks = []
@@ -148,6 +174,8 @@ def _run_kernel():
     outputs = []
     success = True
     error = None
+    executed = False
+    error_kind = ""
 
     km = KernelManager(kernel_name="python3")
     kc = None
@@ -161,12 +189,14 @@ def _run_kernel():
             user_code = f.read()
 
         msg_id = kc.execute(user_code, allow_stdin=False, stop_on_error=False)
+        executed = True
 
         deadline = time.time() + {timeout}
         while True:
             if time.time() > deadline:
                 success = False
                 error = "Execution timed out"
+                error_kind = "timeout"
                 break
 
             try:
@@ -192,6 +222,7 @@ def _run_kernel():
                 success = False
                 tb = content.get("traceback", [])
                 error = "\\n".join(tb) if tb else content.get("evalue")
+                error_kind = "user"
             elif msg_type == "status":
                 if content.get("execution_state") == "idle":
                     break
@@ -202,6 +233,8 @@ def _run_kernel():
             "stderr": "".join(stderr_chunks),
             "outputs": outputs,
             "error": error,
+            "executed": executed,
+            "error_kind": error_kind,
         }}
     except Exception:
         return {{
@@ -210,6 +243,8 @@ def _run_kernel():
             "stderr": "",
             "outputs": [],
             "error": traceback.format_exc(),
+            "executed": executed,
+            "error_kind": "infra",
         }}
     finally:
         if kc is not None:

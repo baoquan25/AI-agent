@@ -107,7 +107,6 @@ class FilesystemService:
                     "name": f.name,
                     "path": f"{path}/{f.name}".lstrip("/") if path else f.name,
                     "type": "directory" if f.is_dir else "file",
-                    "size": getattr(f, "size", 0),
                     "modified": getattr(f, "mod_time", ""),
                     "permissions": getattr(f, "permissions", None) or getattr(f, "mode", ""),
                 }
@@ -115,7 +114,7 @@ class FilesystemService:
             ]
         except Exception as e:
             logger.error(f"list_files failed at {path}: {e}")
-            return []
+            raise RuntimeError(f"list_files failed at {path}: {e}") from e
 
     async def get_tree(self, path: str, sandbox, max_depth: int = 4) -> dict[str, Any]:
         """Build tree using list_files only — avoids redundant get_file_info per node."""
@@ -149,26 +148,33 @@ class FilesystemService:
                             "name": f.name,
                             "path": child_rel,
                             "type": "file",
-                            "size": getattr(f, "size", 0),
                             "modified": getattr(f, "mod_time", ""),
                         })
                 return node
             except Exception as e:
-                return {"name": sdk_dir.split("/")[-1], "error": str(e)}
+                if depth == 0:
+                    raise
+                return {
+                    "name": sdk_dir.split("/")[-1],
+                    "path": rel_path,
+                    "type": "directory",
+                    "error": str(e),
+                }
 
         def _run():
             t0 = time.monotonic()
             tree = build_tree(sdk_path, rel_base, 0)
             logger.info("get_tree(%s) total=%.0fms", path, (time.monotonic()-t0)*1000)
-            if tree:
-                tree["base_path"] = path or "/"
-            return tree or {"error": "Failed to build tree"}
+            if not tree:
+                raise RuntimeError("Failed to build tree")
+            tree["base_path"] = path or "/"
+            return tree
 
         try:
             return await asyncio.to_thread(_run)
         except Exception as e:
             logger.error(f"get_tree failed at {path}: {e}")
-            return {"error": str(e)}
+            raise RuntimeError(f"get_tree failed at {path}: {e}") from e
 
     async def read_file(self, path: str, sandbox) -> dict[str, Any]:
         try:
@@ -347,7 +353,7 @@ class FilesystemService:
             return out
         except Exception as e:
             logger.error(f"search_files failed: {e}")
-            return []
+            raise RuntimeError(f"search_files failed: {e}") from e
 
     async def find_in_files(self, path: str, pattern: str, sandbox) -> list[dict[str, Any]]:
         try:
@@ -366,7 +372,7 @@ class FilesystemService:
             return result
         except Exception as e:
             logger.error(f"find_in_files failed: {e}")
-            return []
+            raise RuntimeError(f"find_in_files failed: {e}") from e
 
     async def move_files(self, source: str, destination: str, sandbox) -> bool:
         try:
@@ -436,4 +442,4 @@ class FilesystemService:
             return out
         except Exception as e:
             logger.error(f"replace_in_files failed: {e}")
-            return []
+            raise RuntimeError(f"replace_in_files failed: {e}") from e

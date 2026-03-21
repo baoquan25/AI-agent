@@ -11,6 +11,7 @@ from dependencies import resolve_sandbox
 
 logger = logging.getLogger("daytona-api")
 router = APIRouter(prefix="/terminal", tags=["Terminal"])
+_PTY_OUTPUT_QUEUE_MAX = 1024
 
 
 @router.websocket("/pty")
@@ -51,16 +52,28 @@ async def pty_websocket(
         return
 
     try:
-        output_queue: asyncio.Queue = asyncio.Queue()
+        output_queue: asyncio.Queue = asyncio.Queue(maxsize=_PTY_OUTPUT_QUEUE_MAX)
+
+        def _enqueue_output(data) -> None:
+            # Bound memory for slow clients: drop oldest output when queue is full.
+            if output_queue.full():
+                try:
+                    output_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                output_queue.put_nowait(data)
+            except asyncio.QueueFull:
+                pass
 
         def _read_pty():
             try:
                 for data in pty_handle:
-                    asyncio.run_coroutine_threadsafe(output_queue.put(data), loop)
+                    loop.call_soon_threadsafe(_enqueue_output, data)
             except Exception:
                 pass
             finally:
-                asyncio.run_coroutine_threadsafe(output_queue.put(None), loop)
+                loop.call_soon_threadsafe(_enqueue_output, None)
 
         threading.Thread(target=_read_pty, daemon=True).start()
 

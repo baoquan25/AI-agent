@@ -4,14 +4,13 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from dependencies import get_sandbox
 from services.llm import run_agent
 from services.conversation import (
     _SENTINEL,
     now_iso, ensure_uuid, sse, strip_workspace,
-    get_bound_sandbox_id, bind_sandbox_id,
     get_thread, create_thread, delete_thread,
 )
 
@@ -28,11 +27,15 @@ def _sandbox_id(request: Request) -> str:
 
 
 def _client_key(request: Request) -> str:
-    return (
-        request.headers.get("x-user-id")
-        or request.headers.get("x-api-key")
-        or ""
-    ).strip()
+    user_id = (request.headers.get("x-user-id") or "").strip()
+    if user_id:
+        return f"user:{user_id}"
+
+    api_key = (request.headers.get("x-api-key") or "").strip()
+    if api_key:
+        return f"api:{api_key}"
+
+    return ""
 
 
 def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str]:
@@ -41,7 +44,6 @@ def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str
     Priority:
     1. x-sandbox-id header from current request
     2. previously bound thread.metadata["sandbox_id"]
-    3. backend mapping by client key (x-user-id/x-api-key)
     """
     header_sandbox_id = _sandbox_id(request)
     client_key = _client_key(request)
@@ -50,17 +52,37 @@ def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str
         metadata = {}
         thread["metadata"] = metadata
 
+    owner_client_key = str(metadata.get("client_key", "") or "").strip()
+    if owner_client_key and client_key and owner_client_key != client_key:
+        raise HTTPException(
+            403,
+            "Thread belongs to a different client key.",
+        )
+    if client_key and not owner_client_key:
+        metadata["client_key"] = client_key
+
     bound_sandbox_id = str(metadata.get("sandbox_id", "") or "").strip()
-    remembered_sandbox_id = get_bound_sandbox_id(client_key) or ""
-    sandbox_id = header_sandbox_id or bound_sandbox_id or remembered_sandbox_id
+    if header_sandbox_id and bound_sandbox_id and header_sandbox_id != bound_sandbox_id:
+        raise HTTPException(
+            409,
+            (
+                f"Thread is already bound to sandbox '{bound_sandbox_id}'. "
+                "Create a new thread_id to use another sandbox."
+            ),
+        )
+
+    sandbox_id = header_sandbox_id or bound_sandbox_id
     if not sandbox_id:
         raise HTTPException(
             400,
-            "Missing sandbox id. Provide header 'x-sandbox-id' at least once.",
+            (
+                "Missing sandbox id. Provide header 'x-sandbox-id' "
+                "or set thread.metadata.sandbox_id."
+            ),
         )
 
-    # Bind/refresh sandbox id to thread metadata so next requests don't need header.
-    if sandbox_id != bound_sandbox_id:
+    # Bind once to thread metadata so next requests don't need header.
+    if not bound_sandbox_id:
         metadata["sandbox_id"] = sandbox_id
 
     return sandbox_id, client_key
@@ -69,13 +91,15 @@ def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str
 # ── POST /conversation/threads ───────────────────────────────────────────────
 
 class ThreadCreateBody(BaseModel):
-    metadata: dict = {}
+    metadata: dict = Field(default_factory=dict)
     thread_id: str | None = None
     if_exists: str | None = None
 
 
 @router.post("/threads")
-async def create_thread_endpoint(body: ThreadCreateBody = ThreadCreateBody()):
+async def create_thread_endpoint(body: ThreadCreateBody | None = None):
+    if body is None:
+        body = ThreadCreateBody()
     thread_id = ensure_uuid(body.thread_id)
     existing = get_thread(thread_id)
     if existing and body.if_exists != "raise":
@@ -121,7 +145,7 @@ async def run_stream(thread_id: str, request: Request):
     thread = get_thread(thread_id)
     if thread is None:
         thread = create_thread(thread_id, {})
-    sandbox_id, client_key = _resolve_thread_sandbox_id(thread, request)
+    sandbox_id, _ = _resolve_thread_sandbox_id(thread, request)
 
     body = await request.json()
     messages = (body.get("input") or {}).get("messages") or []
@@ -136,7 +160,6 @@ async def run_stream(thread_id: str, request: Request):
             f"No sandbox found for '{sandbox_id}'. "
             "Please provide a valid sandbox id in header 'x-sandbox-id'.",
         )
-    bind_sandbox_id(client_key, sandbox_id)
 
     try:
         sandbox.fs.create_folder("/home/daytona/workspace", "755")

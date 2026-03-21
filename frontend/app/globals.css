@@ -331,7 +331,6 @@ header {
   gap: 3px;
 }
 .tree-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.tree-item-size { font-size: 10px; color: var(--muted); margin-left: auto; }
 .tree-children  { padding-left: 0; }
 
 .tree-inline-create-row .tree-lead-icon { pointer-events: none; }

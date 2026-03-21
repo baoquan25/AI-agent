@@ -3,6 +3,7 @@ import uuid
 import asyncio
 from typing import Literal
 from openhands.sdk import LLM, Agent, Conversation, get_logger
+from openhands.sdk.context.condenser import LLMSummarizingCondenser
 from openhands.sdk.llm.streaming import ModelResponseStream
 
 from config import settings
@@ -13,16 +14,27 @@ logger = get_logger(__name__)
 PERSISTENCE_DIR = "/tmp/openhands-conversations"
 StreamingState = Literal["thinking", "content", "tool_name", "tool_args"]
 
-llm = LLM(
+register_all_tools()
+
+def _create_agent(tools):
+    request_llm = LLM(
         usage_id="agent",
         model=settings.LLM_MODEL,
         api_key=settings.OPENAI_KEY,
         reasoning_effort=settings.REASONING_EFFORT,
         stream=True,
     )
-
-# Register all tools once at module load
-register_all_tools()
+    request_condenser = LLMSummarizingCondenser(
+        llm=request_llm.model_copy(update={"usage_id": "condenser"}),
+        max_size=24,
+        keep_first=2,
+    )
+    return Agent(
+        llm=request_llm,
+        tools=tools,
+        agent_context=agent_context,
+        condenser=request_condenser,
+    )
 
 
 def make_token_callback(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, content_parts: list[str]):
@@ -73,13 +85,9 @@ def run_agent(sandbox, sandbox_id: str, message: str, conversation_id: str | Non
     local_workspace = os.path.join("/tmp", "openhands_workspaces", sandbox_id.replace(os.sep, "_"))
     os.makedirs(local_workspace, exist_ok=True)
 
-    agent = Agent(
-        llm=llm,
-        tools=tools,
-        agent_context=agent_context,
-    )
+    agent = _create_agent(tools)
 
-    resolved_id = uuid.UUID(conversation_id)
+    resolved_id = uuid.UUID(conversation_id) if conversation_id else uuid.uuid4()
 
     content_parts: list[str] = []
     token_callbacks = []
@@ -97,12 +105,9 @@ def run_agent(sandbox, sandbox_id: str, message: str, conversation_id: str | Non
 
 
     conversation._state.agent_state["sandbox"] = sandbox
-    conversation._state.agent_state["execution_log"] = (
-        execution_log if execution_log is not None else []
-    )
-    conversation._state.agent_state["file_edits"] = (
-        file_edits if file_edits is not None else []
-    )
+    conversation._state.agent_state["execution_log"] = execution_log if execution_log is not None else []
+    conversation._state.agent_state["file_edits"] = file_edits if file_edits is not None else []
+
 
     conversation.send_message(message)
     conversation.run()

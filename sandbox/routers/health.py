@@ -1,8 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from typing import Optional
-
-from dependencies import get_sandbox
 
 router = APIRouter(prefix="", tags=["Health"])
 
@@ -10,10 +7,25 @@ router = APIRouter(prefix="", tags=["Health"])
 class HealthResponse(BaseModel):
     status: str
     service: str
-    sandbox_id: Optional[str] = None
+    daytona_initialized: bool
+    workspace_manager_initialized: bool
+    filesystem_service_initialized: bool
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(sb_and_id=Depends(get_sandbox)):
-    sandbox, sandbox_id = sb_and_id
-    return HealthResponse(status="ok", service="sandbox", sandbox_id=sandbox_id)
+async def health_check(request: Request):
+    daytona_initialized = request.app.state.daytona is not None
+    workspace_manager_initialized = request.app.state.workspace_manager is not None
+    filesystem_service_initialized = request.app.state.filesystem_service is not None
+    status = (
+        "ok"
+        if daytona_initialized and workspace_manager_initialized and filesystem_service_initialized
+        else "degraded"
+    )
+    return HealthResponse(
+        status=status,
+        service="sandbox",
+        daytona_initialized=daytona_initialized,
+        workspace_manager_initialized=workspace_manager_initialized,
+        filesystem_service_initialized=filesystem_service_initialized,
+    )

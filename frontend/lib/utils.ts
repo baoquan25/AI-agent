@@ -62,10 +62,3 @@ export function stripAnsi(s = ""): string {
     .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
     .replace(/\[[0-9]{1,3}m/g, "");
 }
-
-/** Format số byte thành dạng đọc được (B, KB, MB). */
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
