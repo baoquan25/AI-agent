@@ -272,7 +272,7 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
     def __call__(
         self,
         action: BrowserAction,
-        conversation: LocalConversation | None = None,  # noqa: ARG002
+        conversation: LocalConversation | None = None, 
     ):
         return self._async_executor.run_async(
             self._execute_action, action, timeout=300.0
