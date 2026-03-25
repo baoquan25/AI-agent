@@ -1,5 +1,3 @@
-"""Browser tool executor implementation using browser-use MCP server wrapper."""
-
 from __future__ import annotations
 
 import functools
@@ -35,19 +33,6 @@ F = TypeVar("F", bound=Callable[..., Coroutine[Any, Any, Any]])
 def recording_aware(
     func: Callable[..., Coroutine[Any, Any, Any]],
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator that handles recording flush before/after navigation operations.
-
-    This decorator:
-    1. Flushes recording events before the operation (to preserve them)
-    2. Executes the operation
-    3. Restarts recording on the new page if recording was active
-
-    Error Handling Policy (see recording.py module docstring for full details):
-    - Recording is a secondary feature that should never block browser operations
-    - AttributeError: silent pass (recording not initialized - expected)
-    - Other exceptions: log at DEBUG, don't interrupt navigation
-    """
-
     @functools.wraps(func)
     async def wrapper(self: BrowserToolExecutor, *args: Any, **kwargs: Any) -> Any:
         is_recording = self._server._is_recording
@@ -78,7 +63,6 @@ def recording_aware(
     return wrapper
 
 
-# Suppress browser-use logging for cleaner integration
 if DEBUG:
     logging.getLogger("browser_use").setLevel(logging.DEBUG)
 else:
@@ -149,7 +133,7 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
         Returns:
             Path to Chromium binary if found, None otherwise
         """
-        # Check standard installation paths (prefer full Chrome installs)
+
         standard_paths = [
             # Linux
             "/usr/bin/google-chrome",
@@ -165,8 +149,6 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
             if p.exists():
                 return str(p)
 
-        # Check Playwright-installed Chromium (preferred over PATH lookups
-        # because PATH binaries like homebrew chromium may lack CDP support)
         playwright_cache_candidates = [
             Path.home() / ".cache" / "ms-playwright",  # Linux
             Path.home() / "Library" / "Caches" / "ms-playwright",  # macOS
@@ -220,7 +202,6 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
             logger.info(f"Chromium is available for browser operations at {path}")
             return path
 
-        # Chromium not available - provide clear installation instructions
         raise Exception(_get_chromium_error_message())
 
     def __init__(
@@ -241,7 +222,7 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
                 session_timeout_minutes=session_timeout_minutes,
             )
             if os.getenv("OH_ENABLE_VNC", "false").lower() in {"true", "1", "yes"}:
-                headless = False  # Force headless off if VNC is enabled
+                headless = False 
                 logger.info("VNC is enabled - running browser in non-headless mode")
 
             if inject_scripts:
@@ -254,12 +235,16 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
                     "(required for root). This reduces security isolation."
                 )
 
-            # Extra Chrome args for headless VM environments
             extra_args = [
                 "--no-sandbox",
                 "--disable-gpu",
                 "--disable-dev-shm-usage",
                 "--disable-software-rasterizer",
+                "--disable-background-networking",
+                "--disable-extensions",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--no-first-run",
             ]
 
             self._config = {
@@ -289,13 +274,11 @@ class BrowserToolExecutor(ToolExecutor[BrowserAction, BrowserObservation]):
         action: BrowserAction,
         conversation: LocalConversation | None = None,  # noqa: ARG002
     ):
-        """Submit an action to run in the background loop and wait for result."""
         return self._async_executor.run_async(
             self._execute_action, action, timeout=300.0
         )
 
     async def _execute_action(self, action):
-        """Execute browser action asynchronously."""
         from tools.browser_use.definition import (
             BrowserClickAction,
             BrowserCloseTabAction,
