@@ -5,27 +5,26 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sandbox"
 version = "0.1.0"
-description = "FastAPI sandbox project"
+description = "sandbox project"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
+    "daytona==0.149.0",
+    "openhands-ai==1.4.0",
     "fastapi",
     "uvicorn",
-    "python-multipart",
     "httpx",
-    "aiofiles",
     "requests",
     "pydantic",
     "python-dotenv",
-    "openhands-sdk",
-    "langchain",
-    "langgraph",
-    "daytona>=0.143,<0.150",
     "wsproto",
-    "browser-use==0.12.1",
+    "browser-use==0.11.13",
     "func-timeout",
-    "openai==2.16.0",
-    "uv",
+    "bashlex",
+    "langchain_huggingface",
+    "langchain_community",
+    "faiss-cpu",
+    "langchain",
 ]
 
 [tool.setuptools.packages.find]
