@@ -82,8 +82,8 @@ RUN npm install -g ts-node@10.9.2 typescript@5.9.3 typescript-language-server@5.
 # Create directory for computer use plugin
 RUN mkdir -p /usr/local/lib && chown daytona:daytona /usr/local/lib
 
-ENV LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 # Switch to Daytona user
 USER daytona

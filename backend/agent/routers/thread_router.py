@@ -39,12 +39,6 @@ def _client_key(request: Request) -> str:
 
 
 def _resolve_thread_sandbox_id(thread: dict, request: Request) -> tuple[str, str]:
-    """Resolve sandbox_id for this thread.
-
-    Priority:
-    1. x-sandbox-id header from current request
-    2. previously bound thread.metadata["sandbox_id"]
-    """
     header_sandbox_id = _sandbox_id(request)
     client_key = _client_key(request)
     metadata = thread.get("metadata")
@@ -137,10 +131,7 @@ async def get_thread_history(thread_id: str):
 
 @router.post("/threads/{thread_id}/runs/stream")
 async def run_stream(thread_id: str, request: Request):
-    try:
-        uuid.UUID(thread_id)
-    except ValueError:
-        raise HTTPException(400, f"Invalid thread_id '{thread_id}': must be a valid UUID.")
+    uuid.UUID(thread_id)
 
     thread = get_thread(thread_id)
     if thread is None:
@@ -150,8 +141,6 @@ async def run_stream(thread_id: str, request: Request):
     body = await request.json()
     messages = (body.get("input") or {}).get("messages") or []
     human_text = next((m.get("content", "") for m in reversed(messages) if m.get("type") == "human"), None)
-    if not human_text:
-        raise HTTPException(400, "No human message in input")
 
     sandbox = get_sandbox(sandbox_id)
     if sandbox is None:

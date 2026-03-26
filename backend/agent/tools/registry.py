@@ -7,6 +7,7 @@ from tools.apply_patch.definition import ApplyPatchTool
 from tools.grep.definition import GrepTool
 from tools.glob.definition import GlobTool
 from tools.browser_use.definition import BrowserToolSet
+from tools.delegate.definition import DelegateToolSet
 
 _REGISTERED = False
 
@@ -21,6 +22,7 @@ def register_all_tools():
     register_tool("GrepTool", GrepTool)
     register_tool("GlobTool", GlobTool)
     register_tool("BrowserToolSet", BrowserToolSet)
+    register_tool("DelegateToolSet", DelegateToolSet)
     _REGISTERED = True
 
 def get_tool_references():
@@ -32,4 +34,5 @@ def get_tool_references():
         Tool(name="GrepTool"),
         Tool(name="GlobTool"),
         Tool(name="BrowserToolSet"),
+        Tool(name="DelegateToolSet"),
     ]

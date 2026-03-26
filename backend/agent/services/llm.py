@@ -9,6 +9,7 @@ from openhands.sdk.llm.streaming import ModelResponseStream
 from config import settings
 from tools.registry import register_all_tools, get_tool_references
 from services.agent_context import agent_context, plugin
+import subagent.finance 
 
 logger = get_logger(__name__)
 PERSISTENCE_DIR = "/tmp/openhands-conversations"
@@ -17,7 +18,7 @@ StreamingState = Literal["thinking", "content", "tool_name", "tool_args"]
 register_all_tools()
 
 def _create_agent(tools):
-    request_llm = LLM(
+    llm = LLM(
         usage_id="agent",
         model=settings.LLM_MODEL,
         api_key=settings.OPENAI_KEY,
@@ -25,12 +26,12 @@ def _create_agent(tools):
         stream=True,
     )
     request_condenser = LLMSummarizingCondenser(
-        llm=request_llm.model_copy(update={"usage_id": "condenser"}),
+        llm=llm.model_copy(update={"usage_id": "condenser"}),
         max_size=24,
         keep_first=2,
     )
     return Agent(
-        llm=request_llm,
+        llm=llm,
         tools=tools,
         agent_context=agent_context,
         condenser=request_condenser,
